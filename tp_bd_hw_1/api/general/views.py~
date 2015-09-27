@@ -1,22 +1,28 @@
 from json import dumps
 from django.http import HttpResponse
 
-def create(request):
+from general import codes
+
+__cursor = connection.cursor()
+
+## CLEAR ##
+clear_database_query = '''DELETE FROM post_hierarchy_utils;
+                          DELETE FROM followers;
+                          DELETE FROM subscriptions;
+                          DELETE FROM post;
+                          DELETE FROM thread;
+                          DELETE FROM forum;
+                          DELETE FROM user;
+                       '''
+def clear(request):
+    __cursor.execute(clear_database_query)
+    result = {"code": codes.OK,
+              "result": "OK"
+             }
+    return HttpResponse(dumps(result))
+
+def status(request):
     result = {}
     return HttpResponse(dumps(result))
 
-def details(request):
-    result = {}
-    return HttpResponse(dumps(result))
 
-def listPosts(request):
-    result = {}
-    return HttpResponse(dumps(result))
-
-def listThreads(request):
-    result = {}
-    return HttpResponse(dumps(result))
-
-def listUsers(request):
-    result = {}
-    return HttpResponse(dumps(result))
