@@ -1,0 +1,40 @@
+from json import dumps, loads
+from django.db import DatabaseError, IntegrityError
+
+
+
+get_post_by_id_query = ''' SELECT post.date, forum.short_name, post.id,
+                                  post.isApproved, post.isDeleted, post.isEdited, post.isHighlighted, 
+                                  post.isSpam, post.message, post.parent, post.thread_id, user.email,
+                                  post.forum_id, post.thread_id, post.user_id
+                           FROM post INNER JOIN user
+                           ON post.user_id = user.id
+                           INNER JOIN forum on forum.id = post.forum_id
+                           WHERE post.id = %s;
+                        '''
+
+def get_post_by_id(cursor, post_id):
+    post_qs = cursor.execute(get_post_by_id_query, [post_id, ])
+    if not post_qs.rowcount:
+        return False, "post not found", None
+    post = post_qs.fetchone()
+    return True, 
+        {
+        "date": post[0],
+        "forum": post[1],
+        "id": post[2],
+        "isApproved": post[3],
+        "isDeleted": post[4],
+        "isEdited": post[5],
+        "isHighlighted": post[6],
+        "isSpam": post[7],
+        "message": post[8],
+        "parent": post[9],
+        "thread": post[10],
+        "user": post[11]
+        },
+        {
+         "forum": post[12],
+         "thread": post[13],
+         "user": post[14]
+         }

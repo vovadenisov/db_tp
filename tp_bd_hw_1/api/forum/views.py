@@ -87,7 +87,7 @@ def details(request):
                                    'response': 'request method should be GET'}))
     short_name = request.GET.get('forum')
     if not short_name:
-        return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'forum name not found'})) 
     try:
         forum_qs = __cursor.execute(get_forum_by_short_name_query, [short_name, ]) 
@@ -153,7 +153,7 @@ def listPosts(request):
     query_params = [forum_id, ]
     since_date = general_utils.validate_date(request.GET.get('since'))
     if since_date:
-        get_all_forum_posts_specified_query += '''AND date >= %s '''
+        get_all_forum_posts_specified_query += '''AND post.date >= %s '''
         query_params.append(since_date)
     elif since_date == False and since_date is not None:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
