@@ -37,7 +37,7 @@ def create(request):
         json_request = loads(request.body) 
     except ValueError as value_err:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
-                                   'response': str(value_err)}))
+                                   'response': unicode(value_err)}))
     
     try:
         name = json_request['name']
@@ -45,13 +45,13 @@ def create(request):
         email = json_request['user']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                   'response': 'Not found: {}'.format(str(key_err))}))    
+                                   'response': 'Not found: {}'.format(unicode(key_err))}))    
    
     try:
         user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
@@ -78,7 +78,7 @@ def create(request):
                                          }}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
 ## DETAILS ##
 def details(request):
@@ -96,7 +96,7 @@ def details(request):
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
     forum = forum_qs.fetchone()
     response = {"id": forum[0],
                 "name": forum[1],
@@ -113,7 +113,7 @@ def details(request):
             user = get_user_by_id(__cursor, user_id)
         except DatabaseError as db_err: 
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                       'response': str(db_err)}))
+                                       'response': unicode(db_err)}))
         request['user'] = user
         
     else:
@@ -146,14 +146,14 @@ def listPosts(request):
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
     forum_id = forum_qs.fetchone()[0]
 
     get_all_forum_posts_specified_query = get_all_forum_posts_query
     query_params = [forum_id, ]
     since_date = general_utils.validate_date(request.GET.get('since'))
     if since_date:
-        get_all_forum_posts_specified_query += '''AND date >= %s '''
+        get_all_forum_posts_specified_query += '''AND post.date >= %s '''
         query_params.append(since_date)
     elif since_date == False and since_date is not None:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
@@ -180,7 +180,7 @@ def listPosts(request):
         posts_qs = __cursor.execute(get_all_forum_posts_specified_query, query_params) 
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)})) 
+                                   'response': unicode(db_err)})) 
     
     related = set(request.GET.getlist('related'))
     posts = []
@@ -248,7 +248,7 @@ def listPosts(request):
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
     forum_id = forum_qs.fetchone()[0]
 
     get_all_forum_threads_specified_query = get_all_forum_threads_query
@@ -282,7 +282,7 @@ def listPosts(request):
         threads_qs = __cursor.execute(get_all_forum_threads_specified_query, query_params) 
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)})) 
+                                   'response': unicode(db_err)})) 
     
     related = set(request.GET.getlist('related'))
     threads = []
@@ -336,7 +336,7 @@ def listPosts(request):
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
     forum_id = forum_qs.fetchone()[0]
 
     get_all_forum_users_specified_query = get_all_forum_users_query
@@ -370,7 +370,7 @@ def listPosts(request):
         users_qs = __cursor.execute(get_all_forum_threads_specified_query, query_params) 
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)})) 
+                                   'response': unicode(db_err)})) 
     users = []
     for user in users_qs.fetchall():
         users.append(get_user_by_id(user[0]))  

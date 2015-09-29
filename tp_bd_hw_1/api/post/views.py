@@ -18,12 +18,6 @@ related_functions_dict = {
                           }
 
 ## CREATE ##
-create_forum_query = '''INSERT INTO forum
-                        (name, short_name, user_id)
-                        VALUES
-                        (%s, %s, %s);
-                        SELECT LAST_INSERT_ID();
-                     '''
 get_user_by_email_query = '''SELECT id FROM user
                              WHERE email = %s;
                           '''
@@ -51,7 +45,7 @@ get_max_post_and_update_query = '''UPDATE post_hierarchy_utils
                                    WHERE forum_id = %s; 
                                 '''
 
-get_max_post_and_insert_query = '''INSERT INTO post_hierarchy_utils
+get_max_post_and_insert_query = u'''INSERT INTO post_hierarchy_utils
                                    (forum_id, head_posts_number)
                                    VALUES
                                    (%s, 1);
@@ -59,7 +53,7 @@ get_max_post_and_insert_query = '''INSERT INTO post_hierarchy_utils
                                    FROM post_hierarchy_utils
                                    WHERE forum_id = %s; 
                                 '''
-create_post_base_query = '''INSERT INTO post 
+create_post_base_query = u'''INSERT INTO post 
                             (hierarchy_id, date, message, user_id, forum_id, thread_id, parent_id)
                             VALUES
                             (%s, %s, %s, %s, %s, %s);
@@ -72,7 +66,7 @@ def create(request):
         json_request = loads(request.body) 
     except ValueError as value_err:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
-                                   'response': str(value_err)}))
+                                   'response': unicode(value_err)}))
     
     try:
         date = json_request['date']
@@ -82,13 +76,13 @@ def create(request):
         email = json_request['user']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                   'response': 'Not found: {}'.format(str(key_err))}))    
+                                   'response': 'Not found: {}'.format(unicode(key_err))}))    
     # validate user
     try:
         user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
@@ -100,7 +94,7 @@ def create(request):
         forum_id_qs = __cursor.execute(get_forum_by_short_name_query, [forum, ])  
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     if not forum_id_qs.rowcount:
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
@@ -112,7 +106,7 @@ def create(request):
         thread_id_qs = __cursor.execute(get_thread_by_id_query, [thread_id, ])  
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     if not thread_id_qs.rowcount:
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
@@ -135,7 +129,7 @@ def create(request):
        if optional_arg_value is not None:
            if not isinstance(optional_arg_value, bool):
                return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                          'response': 'message should not be empty'})) 
+                                          'response': 'optional flag should be bool'})) 
                query_params.append([optional_arg_name, optional_arg_value])
 
     parent_id = request.GET.get('parent')
@@ -145,31 +139,31 @@ def create(request):
                 post_qs = __cursor.execute(get_post_by_id_and_update_query, [parent_id, parent_id])  
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                           'response': str(db_err)}))
+                                           'response': unicode(db_err)}))
 
             if not post_qs.rowcount:
                 return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                            'response': 'parent post not found'}))
             post = post_qs.fetchone()
-            hierarchy_id = post[2] + str(post[1]) + '/'    
+            hierarchy_id = post[2] + unicode(post[1]) + '/'    
         else:
             try:
                 max_post_qs = __cursor.execute(get_max_post_and_update_query, [parent_id, parent_id])  
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                           'response': str(db_err)}))
+                                           'response': unicode(db_err)}))
 
             if not max_post_qs.rowcount:
                 max_post_qs = __cursor.execute(get_max_post_and_insert_query, [parent_id, parent_id])  
 
             post = max_post_qs.fetchone()
-            hierarchy_id = str(post[0]) + '/'
+            hierarchy_id = unicode(post[0]) + '/'
         try:
             post_qs = __cursor.execute(create_post_base_query, [hierarchy_id, date, message,
                                                                 user_id, forum_id, thread_id, parent_id])
         except DatabaseError as db_err: 
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                       'response': str(db_err)})) 
+                                       'response': unicode(db_err)})) 
         post_id = post_qs.fetchone()[0]
          
 
@@ -182,11 +176,11 @@ def create(request):
             __cursor.execute(update_post_query, [query_param[1] for query_param in query_params] + [post_id,])
         except DatabaseError as db_err: 
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                       'response': str(db_err)}))        
+                                       'response': unicode(db_err)}))        
   
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     flag, post, realted_ids = get_post_by_id(__cursor, post_id)
     if flag:
@@ -216,7 +210,7 @@ def details(request):
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     related = request.GET.getlist('related')
 
@@ -277,7 +271,7 @@ def list_posts(request):
                                        'response': '{} not found'.format(related_table_name)})) 
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
     related_id = id_qs.fetchone()[0]
     query_params = [related_id, ]
     get_post_list_specified_query = get_post_list_query
@@ -310,7 +304,7 @@ def list_posts(request):
         post_list_qs = __cursor.execute(get_post_list_query.format(related_table_name), query_params)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)})) 
+                                   'response': unicode(db_err)})) 
     
     posts = []
 
@@ -348,12 +342,12 @@ def remove(request):
         json_request = loads(request.body) 
     except ValueError as value_err:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
-                                   'response': str(value_err)}))   
+                                   'response': unicode(value_err)}))   
     try:
         post_id = json_request['post']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                   'response': 'Not found: {}'.format(str(key_err))})) 
+                                   'response': 'Not found: {}'.format(unicode(key_err))})) 
     post_id = general_utils.validate_id(post_id) 
     if post_id == False:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
@@ -365,7 +359,7 @@ def remove(request):
                                         'response': 'post not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {"post": post_id}}))
@@ -377,12 +371,12 @@ def restore(request):
         json_request = loads(request.body) 
     except ValueError as value_err:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
-                                   'response': str(value_err)}))   
+                                   'response': unicode(value_err)}))   
     try:
         post_id = json_request['post']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                   'response': 'Not found: {}'.format(str(key_err))}))
+                                   'response': 'Not found: {}'.format(unicode(key_err))}))
  
     post_id = general_utils.validate_id(post_id) 
     if post_id == False:
@@ -395,13 +389,13 @@ def restore(request):
                                         'response': 'post not found'}))
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)}))
+                                   'response': unicode(db_err)}))
 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {"post": post_id}}))
 
 ## UPDATE ##
-update_post_message_query = '''UPDATE post
+update_post_message_query = u'''UPDATE post
                                SET message = %s
                                WHERE id = %s;
                                SELECT id FROM post
@@ -411,13 +405,13 @@ def update(request):
         json_request = loads(request.body) 
     except ValueError as value_err:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
-                                   'response': str(value_err)}))   
+                                   'response': unicode(value_err)}))   
     try:
         post_id = json_request['post']
-        message = str(json_request['message'])
+        message = unicode(json_request['message'])
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                   'response': 'Not found: {}'.format(str(key_err))}))
+                                   'response': 'Not found: {}'.format(unicode(key_err))}))
 
     post_id = general_utils.validate_id(post_id) 
     if post_id == False:
@@ -431,7 +425,7 @@ def update(request):
         flag, post, related_obj = get_post_by_id(__cursor, post_id)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)})) 
+                                   'response': unicode(db_err)})) 
 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
@@ -448,13 +442,13 @@ def vote(request):
         json_request = loads(request.body) 
     except ValueError as value_err:
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
-                                   'response': str(value_err)}))   
+                                   'response': unicode(value_err)}))   
     try:
         post_id = json_request['post']
         vote = json_request['vote']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                   'response': 'Not found: {}'.format(str(key_err))}))
+                                   'response': 'Not found: {}'.format(unicode(key_err))}))
 
     post_id = general_utils.validate_id(post_id) 
     if post_id == False:
@@ -480,7 +474,7 @@ def vote(request):
         flag, post, related_obj = get_post_by_id(__cursor, post_id)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': str(db_err)})) 
+                                   'response': unicode(db_err)})) 
 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
