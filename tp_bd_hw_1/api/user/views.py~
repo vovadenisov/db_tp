@@ -112,6 +112,8 @@ def details(request):
                                'response': user}))    
 
 ## FOLLOW ##
+create_following_relationship_query = '''
+                                      '''
 def follow(request):
     result = {}
     return HttpResponse(dumps(result))

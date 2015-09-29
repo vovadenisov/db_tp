@@ -112,10 +112,25 @@ def details(request):
                                'response': user}))    
 
 ## FOLLOW ##
-create_following_relationship_query = '''
+create_following_relationship_query = '''INSERT INTO followers
+                                         (follower_id, following_id)
+                                         VALUES
+                                         (%s, %s)
                                       '''
 def follow(request):
-    result = {}
+    try:
+        json_request = loads(request.body) 
+    except ValueError as value_err:
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
+                                   'response': str(value_err)}))
+    
+    try:
+        follower = unicode(json_request['follower'])
+        followee = unicode(json_request['followee'])
+    except KeyError as key_err:
+        return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                   'response': 'Not found: {}'.format(str(key_err))}))    
+
     return HttpResponse(dumps(result))
 
 def listFollowers(request):
