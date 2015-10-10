@@ -22,9 +22,9 @@ from api.general import urls as general_urls
 #forum, user, post, thread, general
 
 urlpatterns = [
-    url(r'^forum/', include(forum_urls)),
-    url(r'^user/', include(user_urls)),
-    url(r'^post/', include(post_urls)),
-    url(r'^thread/', include(thread_urls)),
-    url(r'', include(general_urls)),
+    url(r'^db/api/forum/', include(forum_urls)),
+    url(r'^db/api/user/', include(user_urls)),
+    url(r'^db/api/post/', include(post_urls)),
+    url(r'^db/api/thread/', include(thread_urls)),
+    url(r'^db/api/', include(general_urls)),
 ]

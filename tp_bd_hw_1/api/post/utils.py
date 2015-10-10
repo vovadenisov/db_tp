@@ -15,12 +15,11 @@ get_post_by_id_query = ''' SELECT post.date, post.dislikes, forum.short_name, po
                         '''
 
 def get_post_by_id(cursor, post_id):
-    post_qs = cursor.execute(get_post_by_id_query, [post_id, ])
+    post_qs = cursor.execute(get_post_by_id_query, [post_id,])
     post = post_qs.fetchone()
-    return True, 
-        {
+    return {
         "date": post[0],
-        "dislikes": post[1]
+        "dislikes": post[1],
         "forum": post[2],
         "id": post[3],
         "isApproved": post[4],
@@ -34,7 +33,7 @@ def get_post_by_id(cursor, post_id):
         "points": post[12],
         "thread": post[13],
         "user": post[14]
-        },
+        }, \
         {
          "forum": post[15],
          "thread": post[16],

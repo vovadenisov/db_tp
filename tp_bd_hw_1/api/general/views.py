@@ -1,9 +1,9 @@
 from json import dumps
+from django.db import connection, DatabaseError, IntegrityError, transaction
 from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
 
-from general import codes
-
-__cursor = connection.cursor()
+import codes
 
 ## CLEAR ##
 clear_database_query = '''DELETE FROM post_hierarchy_utils;
@@ -14,11 +14,14 @@ clear_database_query = '''DELETE FROM post_hierarchy_utils;
                           DELETE FROM forum;
                           DELETE FROM user;
                        '''
+@csrf_exempt
 def clear(request):
-    __cursor.execute(clear_database_query)
+    cursor = connection.cursor()
+    cursor.execute(clear_database_query)
     result = {"code": codes.OK,
               "response": "OK"
              }
+    cursor.close()
     return HttpResponse(dumps(result))
 
 ## STATUS ##
@@ -27,12 +30,14 @@ get_status_query = '''SELECT table_name, table_rows
                       WHERE TABLE_SCHEMA = 'tp_hw_1'
                       AND table_name IN ('user', 'thread', 'forum', 'post')
                    '''
-
+@csrf_exempt
 def status(request):
+    __cursor = connection.cursor()
     statuses_qs = __cursor.execute(get_status_query).fetchall()
     statuses = {}
-    for status in statuses_qs:
-        statuses[status[0]] = status[1]
+    for status_ in statuses_qs:
+        statuses[status_[0]] = status_[1]
+    __cursor.close()
     return HttpResponse(dumps({
                           "code": codes.OK,
                           "response": statuses

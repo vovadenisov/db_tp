@@ -1,13 +1,14 @@
 from json import dumps, loads
+
 from django.db import connection, DatabaseError, IntegrityError
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
 
-from general import codes, utils as general_utils
-from user.utils import get_user_by_id
-from thread.utils import get_thread_by_id
-from .utils import get_forum_by_id
-
-__cursor = connection.cursor()
+from api.general import codes, utils as general_utils
+from api.user.utils import get_user_by_id
+from api.thread.utils import get_thread_by_id
+from api.forum.utils import get_forum_by_id
+from api.post.utils import get_post_by_id
 
 related_functions_dict = {'user': get_user_by_id,
                           'thread': get_thread_by_id,
@@ -32,10 +33,13 @@ get_forum_by_short_name_query = u'''SELECT forum.id, forum.name, forum.short_nam
                                    WHERE forum.short_name = %s;
                                 ''' 
 
+@csrf_exempt
 def create(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': unicode(value_err)}))
     
@@ -44,22 +48,26 @@ def create(request):
         short_name = json_request['short_name']
         email = json_request['user']
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(unicode(key_err))}))    
    
     try:
         user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
 
     user_id = user_id_qs.fetchone()[0]
     try:
         forum_id_qs = __cursor.execute(create_forum_query, [name, short_name, user_id]).fetchone()
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.OK,
                                    'response': {
                                         'id': forum_id_qs[0],
@@ -69,6 +77,7 @@ def create(request):
                                          }}))
     except IntegrityError:
         existed_forum = __cursor.execute(get_forum_by_short_name_query, [short_name, ]).fetchone()
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.OK,
                                    'response': {
                                         'id': existed_forum[0],
@@ -77,24 +86,30 @@ def create(request):
                                         'user': existed_forum[3]
                                          }}))
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
 ## DETAILS ##
 def details(request):
+    __cursor = connection.cursor()
     if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     short_name = request.GET.get('forum')
     if not short_name:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'forum name not found'})) 
     try:
         forum_qs = __cursor.execute(get_forum_by_short_name_query, [short_name, ]) 
         if not forum_qs.rowcount:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'forum not found'}))
-    except DatabaseError as db_err: 
+    except DatabaseError as db_err:
+        __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
     forum = forum_qs.fetchone()
@@ -106,18 +121,21 @@ def details(request):
     related = request.GET.get('related')
     if related:
         if related != 'user':
+            __cursor.close()
             return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                        'response': 'incorrect related parameter: {}'.format(related)}))
         user_id = forum[4]
         try:
             user, related_ids = get_user_by_id(__cursor, user_id)
         except DatabaseError as db_err: 
+            __cursor.close()
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)}))
         request['user'] = user
         
     else:
-        response["user"] = forum[3]         
+        response["user"] = forum[3]  
+        __cursor.close()       
     return HttpResponse(dumps({'code': codes.OK,
                                'response': response}))
 
@@ -132,19 +150,24 @@ get_all_forum_posts_query = '''SELECT post.date, post.dislikes, forum.short_name
                                 WHERE post.forum_id = %s
                             '''
 def listPosts(request):
+    __cursor = connection.cursor()
     if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     short_name = request.GET.get('forum')
     if not short_name:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'forum name not found'})) 
     try:
         forum_qs = __cursor.execute(get_forum_by_short_name_query, [short_name, ]) 
         if not forum_qs.rowcount:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
     forum_id = forum_qs.fetchone()[0]
@@ -156,11 +179,13 @@ def listPosts(request):
         get_all_forum_posts_specified_query += '''AND post.date >= %s '''
         query_params.append(since_date)
     elif since_date == False and since_date is not None:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect since_date fromat'}))
 
     order = request.GET.get('order', 'desc')
     if order.lower() not in ('asc', 'desc'):
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
@@ -171,6 +196,7 @@ def listPosts(request):
         try:
             limit = int(limit)
         except ValueError:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                         'response': 'limit should be int'}))
         get_all_forum_posts_specified_query += ''' LIMIT %s'''
@@ -179,6 +205,7 @@ def listPosts(request):
     try:
         posts_qs = __cursor.execute(get_all_forum_posts_specified_query, query_params) 
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     
@@ -188,7 +215,7 @@ def listPosts(request):
         posts.append({
             "date": post[0],
             "dislikes": post[1],
-            "forum": post[2]:
+            "forum": post[2],
             "id": post[3],
             "isApproved": post[4],
             "isDeleted": post[5],
@@ -211,7 +238,7 @@ def listPosts(request):
         for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
             get_related_info_func = related_functions_dict[related_]
             posts[-1][related_], related_ids_ = get_related_info_func(related_ids[related_])
-             
+    __cursor.close()            
     return HttpResponse(dumps({'code': codes.OK,
                                'response': posts
                                }))
@@ -231,19 +258,24 @@ get_all_forum_threads_query = '''SELECT thread.date, thread.dislikes, forum.shor
                                  WHERE thread.forum_id = %s
                             '''
 def listThreads(request):
+    __cursor = connection.cursor()
     if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     short_name = request.GET.get('forum')
     if not short_name:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'forum name not found'})) 
     try:
         forum_qs = __cursor.execute(get_forum_by_short_name_query, [short_name, ]) 
         if not forum_qs.rowcount:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'forum not found'}))
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
     forum_id = forum_qs.fetchone()[0]
@@ -255,11 +287,13 @@ def listThreads(request):
         get_all_forum_threads_specified_query += '''AND date >= %s '''
         query_params.append(since_date)
     elif since_date == False and since_date is not None:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect since_date fromat'}))
  
     order = request.GET.get('order', 'desc')
     if order.lower() not in ('asc', 'desc'):
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
@@ -270,6 +304,7 @@ def listThreads(request):
         try:
             limit = int(limit)
         except ValueError:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                         'response': 'limit should be int'}))
         get_all_forum_threads_specified_query += ''' LIMIT %s'''
@@ -278,6 +313,7 @@ def listThreads(request):
     try:
         threads_qs = __cursor.execute(get_all_forum_threads_specified_query, query_params) 
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     
@@ -287,7 +323,7 @@ def listThreads(request):
         threads.append({
             "date": thread[0],
             "dislikes": thread[1],
-            "forum": thread[2]:
+            "forum": thread[2],
             "id": thread[3],
             "isClosed": thread[4],
             "isDeleted": thread[5],
@@ -307,7 +343,7 @@ def listThreads(request):
         for related_ in filter(lambda x: x in related_functions_dict.keys() and x != 'thread', related):
             get_related_info_func = related_functions_dict[related_]
             threads[-1][related_], related_ids_ = get_related_info_func(related_ids[related_])      
-        
+    __cursor.close()        
     return HttpResponse(dumps({'code': codes.OK,
                                'response': threads
                                }))
@@ -318,20 +354,25 @@ get_all_forum_users_query = '''SELECT user.id
                                ON user.id = post.user_id
                                WHERE post.forum_id = %s
                             '''
-def listPosts(request):
+def listUsers(request):
+    __cursor = connection.cursor()
     if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     short_name = request.GET.get('forum')
     if not short_name:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'forum name not found'})) 
     try:
         forum_qs = __cursor.execute(get_forum_by_short_name_query, [short_name, ]) 
         if not forum_qs.rowcount:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'forum not found'}))
-    except DatabaseError as db_err: 
+    except DatabaseError as db_err:
+        __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
     forum_id = forum_qs.fetchone()[0]
@@ -343,35 +384,39 @@ def listPosts(request):
         get_all_forum_users_specified_query += '''AND id >= %s '''
         query_params.append(since_id)
     elif since_id == False and since_id is not None:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'since_id should be int'})) 
    
     order = request.GET.get('order', 'desc')
     if order.lower() not in ('asc', 'desc'):
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
-    get_all_forum_threads_specified_query += '''ORDER BY user.name ''' + order
+    get_all_forum_users_specified_query += '''ORDER BY user.name ''' + order
 
     limit = request.GET.get('limit')
     if limit:
         try:
             limit = int(limit)
         except ValueError:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                         'response': 'limit should be int'}))
-        get_all_forum_threads_specified_query += ''' LIMIT %s'''
+        get_all_forum_users_specified_query += ''' LIMIT %s'''
         query_params.append(limit)
 
     try:
         users_qs = __cursor.execute(get_all_forum_users_specified_query, query_params) 
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     users = []
     for user in users_qs.fetchall():
         users.append(get_user_by_id(user[0])[0])  
-        
+    __cursor.close()       
     return HttpResponse(dumps({'code': codes.OK,
                                'response': users
                                }))

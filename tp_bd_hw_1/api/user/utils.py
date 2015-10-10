@@ -1,6 +1,3 @@
-from json import dumps, loads
-from django.db import DatabaseError, IntegrityError
-
 get_user_info_query = '''SELECT about, email, id, isAnonymous, name, username
                          FROM user
                          WHERE id = %s
@@ -39,7 +36,7 @@ def get_user_by_id(cursor, user_id):
         result_user["followers"].extend([follower[0] for follower in followers_qs.fetchall()])
     followings_qs = cursor.execute(get_user_followings_query, [user_id, ])
     if followings_qs.rowcount:
-        result_user["followings"].extend([ffollowing[0] for following in followings_qs.fetchall()])
+        result_user["followings"].extend([following[0] for following in followings_qs.fetchall()])
     subscriptions_qs = cursor.execute(get_user_subscriptions_query, [user_id, ])
     if subscriptions_qs.rowcount:
         result_user["subscriptions"].extend([subscription[0] for subscription in  subscriptions_qs.fetchall()])

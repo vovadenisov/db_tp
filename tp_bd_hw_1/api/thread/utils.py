@@ -17,7 +17,7 @@ get_thread_by_id_query = '''SELECT thread.date, thread.dislikes, forum.short_nam
                         '''
 
 def get_thread_by_id(cursor, thread_id):
-    thread_qs = cursor.execute(get_thread_by_id_query, [thread_id, ]).#fetchone()
+    thread_qs = cursor.execute(get_thread_by_id_query, [thread_id, ])#fetchone()
     thread = thread_qs.fetchone()
     return {"date": thread[0],
             "dislikes": thread[1],
@@ -32,8 +32,8 @@ def get_thread_by_id(cursor, thread_id):
             "slug": thread[10],
             "title": thread[11],
             "user": thread[12]
-           },
+           }, \
            {
-           "forum": post[13],
-           "user": post[14]
+           "forum": thread[13],
+           "user": thread[14]
            }

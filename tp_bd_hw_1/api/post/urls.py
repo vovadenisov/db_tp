@@ -1,4 +1,4 @@
-from django.conf.urls import include, url
+from django.conf.urls import url
 from views import create, details, list_posts, remove, restore, update, vote
 
 urlpatterns = [

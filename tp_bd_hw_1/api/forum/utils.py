@@ -14,7 +14,7 @@ def get_forum_by_id(cursor, forum_id):
             "name": forum[1],
             "short_name": forum[2],
             "user": forum[3]
-           },
+           }, \
            {
             "user": forum[4]
            }

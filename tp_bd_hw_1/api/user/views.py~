@@ -1,15 +1,14 @@
-from json import dumps
+from json import dumps, loads
 
 from django.db import connection, DatabaseError, IntegrityError, transaction
 from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
 
-from general import codes, utils as general_utils
-from .utils import get_user_by_id
-from thread.utils import get_thread_by_id
-from post.utils import get_post_by_id
-from forum.utils import get_forum_by_id
-
-__cursor = connection.cursor()
+from api.general import codes, utils as general_utils
+from api.user.utils import get_user_by_id
+from api.thread.utils import get_thread_by_id
+from api.forum.utils import get_forum_by_id
+from api.post.utils import get_post_by_id
 
 related_functions_dict = {
                           'user': get_user_by_id,
@@ -26,11 +25,14 @@ create_user_query = u''' INSERT INTO user
                      '''
 update_user_query = '''UPDATE  user SET isAnonymous = %s 
                        WHERE id = %s '''
-                              
+
+@csrf_exempt                              
 def create(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': str(value_err)}))
     
@@ -40,17 +42,20 @@ def create(request):
         name = unicode(json_request['message'])
         email = unicode(json_request['email'])
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))    
 
 
     try:
-        user_qs = __cursor.execute(create_user_query, [username, about, name, emai])
+        user_qs = __cursor.execute(create_user_query, [username, about, name, email])
     except IntegrityError:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.USER_ALREADY_EXISTS,
                                    'response': 'user already exists'})) 
 
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': str(db_err)}))
  
@@ -68,16 +73,18 @@ def create(request):
             return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                        'response': 'isAnonymous flag should be bool'}))
     except KeyError:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.OK,
                                    'response': user}))
-    try
+    try:
         __cursor.execute(update_user_query, [isAnonymous, user_id])
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': str(db_err)}))
 
     user["isAnonymous"] = isAnonymous 
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))
 
@@ -86,28 +93,34 @@ get_user_by_email_query = '''SELECT id FROM user
                              WHERE email = %s;
                           '''
 def details(request):
-   if request.method != 'GET':
+    __cursor = connection.cursor()
+    if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     email = request.GET.get('user')
     # validate user
     try:
-        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
+        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ]) 
+        print  user_id_qs
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
     user_id = user_id_qs.fetchone()[0]
 
     try:
-        user = get_user_by_id(__cursor, user_id)
+        user, related_ids = get_user_by_id(__cursor, user_id)
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))    
 
@@ -118,11 +131,13 @@ create_following_relationship_query = '''INSERT INTO followers
                                          (%s, %s)
                                       '''
 
-
+@csrf_exempt
 def follow(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': str(value_err)}))
     
@@ -130,6 +145,7 @@ def follow(request):
         follower = unicode(json_request['follower'])
         followee = unicode(json_request['followee'])
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))  
 
@@ -139,10 +155,12 @@ def follow(request):
         try:
             user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
         except DatabaseError as db_err: 
+            __cursor.close()
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)}))
 
         if not user_id_qs.rowcount:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'user with not found'}))
         user_id = user_id_qs.fetchone()[0]
@@ -153,15 +171,17 @@ def follow(request):
     except IntegrityError:
         pass
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))  
     
     try:
-        user, related_id = get_user_by_id(__cursor, users[0])
-    except DatabaseError as db_err: 
+        user, related_ids = get_user_by_id(__cursor, users[0])
+    except DatabaseError as db_err:
+        __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))
 
@@ -173,7 +193,9 @@ get_all_followers_query_prefix = '''SELECT user.id
                                  '''
 
 def listFollowers(request):
-   if request.method != 'GET':
+    __cursor = connection.cursor()
+    if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     email = request.GET.get('user')
@@ -181,25 +203,29 @@ def listFollowers(request):
     try:
         user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
     user_id = user_id_qs.fetchone()[0]
     query = get_all_followers_query_prefix
     query_params = [user_id, ]
     since_id = general_utils.validate_id(request.GET.get('id'))
-    if since_date:
+    if since_id:
         query += '''AND follower_id >= %s '''
-        query_params.append(since_date)
-    elif since_date == False and since_date is not None:
+        query_params.append(since_id)
+    elif since_id == False and since_id is not None:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect since_id fromat'}))
 
     order = request.GET.get('order', 'desc')
     if order.lower() not in ('asc', 'desc'):
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
@@ -210,6 +236,7 @@ def listFollowers(request):
         try:
             limit = int(limit)
         except ValueError:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                         'response': 'limit should be int'}))
         query += ''' LIMIT %s'''
@@ -218,6 +245,7 @@ def listFollowers(request):
     try:
         user_ids_qs = __cursor.execute(query, query_params)
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     
@@ -225,11 +253,13 @@ def listFollowers(request):
     if user_ids_qs.rowcount:
         for user_id in user_ids_qs.fetchall():
             try:
-                user, rekated_ids = get_user_by_id(__cursor, users[0])
+                user, related_ids = get_user_by_id(__cursor, user_id[0])
             except DatabaseError as db_err: 
+                __cursor.close()
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))  
             followers.append(user)
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': followers})) 
 
@@ -242,7 +272,9 @@ get_all_followings_query_prefix = '''SELECT user.id
                                  '''
 
 def listFollowings(request):
-   if request.method != 'GET':
+    __cursor = connection.close()
+    if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     email = request.GET.get('user')
@@ -250,25 +282,29 @@ def listFollowings(request):
     try:
         user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
     user_id = user_id_qs.fetchone()[0]
     query = get_all_followings_query_prefix
     query_params = [user_id, ]
     since_id = general_utils.validate_id(request.GET.get('id'))
-    if since_date:
+    if since_id:
         query += '''AND following_id >= %s '''
-        query_params.append(since_date)
-    elif since_date == False and since_date is not None:
+        query_params.append(since_id)
+    elif since_id == False and since_id is not None:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect since_id fromat'}))
 
     order = request.GET.get('order', 'desc')
     if order.lower() not in ('asc', 'desc'):
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
@@ -279,6 +315,7 @@ def listFollowings(request):
         try:
             limit = int(limit)
         except ValueError:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                         'response': 'limit should be int'}))
         query += ''' LIMIT %s'''
@@ -287,6 +324,7 @@ def listFollowings(request):
     try:
         user_ids_qs = __cursor.execute(query, query_params)
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     
@@ -294,8 +332,9 @@ def listFollowings(request):
     if user_ids_qs.rowcount:
         for user_id in user_ids_qs.fetchall():
             try:
-                user, related_ids = get_user_by_id(__cursor, users[0])
+                user, related_ids = get_user_by_id(__cursor, user_id[0])
             except DatabaseError as db_err: 
+                __cursor.close()
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))  
             followings.append(user)
@@ -314,18 +353,22 @@ get_all_user_posts_query = '''SELECT post.date, post.dislikes, forum.short_name,
                         WHERE user.id = %s '''
 
 def listPosts(request):
-   if request.method != 'GET':
+    __cursor = connection.cursor()
+    if request.method != 'GET':
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
     email = request.GET.get('user')
     # validate user
     try:
         user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
-    except DatabaseError as db_err: 
+    except DatabaseError as db_err:
+        __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
     if not user_id_qs.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
     user_id = user_id_qs.fetchone()[0]
@@ -333,14 +376,16 @@ def listPosts(request):
     get_post_list_specified_query = get_all_user_posts_query
     since_date = general_utils.validate_date(request.GET.get('since'))
     if since_date:
-        get_all_forum_posts_specified_query += '''AND post.date >= %s '''
+        get_post_list_specified_query += '''AND post.date >= %s '''
         query_params.append(since_date)
     elif since_date == False and since_date is not None:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect since_date fromat'}))
 
     order = request.GET.get('order', 'desc')
     if order.lower() not in ('asc', 'desc'):
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
@@ -351,14 +396,16 @@ def listPosts(request):
         try:
             limit = int(limit)
         except ValueError:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                         'response': 'limit should be int'}))
         get_post_list_specified_query += ''' LIMIT %s'''
         query_params.append(limit)
 
     try:
-        post_list_qs = __cursor.execute(get_post_list_query.format(related_table_name), query_params)
+        post_list_qs = __cursor.execute(get_post_list_specified_query, query_params)
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     
@@ -382,6 +429,7 @@ def listPosts(request):
             "thread": post[13],
             "user": post[14]
         })
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': posts})) 
 
@@ -391,11 +439,13 @@ delete_following_relationship_query = '''DELETE FROM followers
                                          AND following_id = %s    
                                       '''
 
-
+@csrf_exempt
 def unfollow(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': str(value_err)}))
     
@@ -403,6 +453,7 @@ def unfollow(request):
         follower = unicode(json_request['follower'])
         followee = unicode(json_request['followee'])
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))  
 
@@ -412,10 +463,12 @@ def unfollow(request):
         try:
             user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
         except DatabaseError as db_err: 
+            __cursor.close()
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)}))
 
         if not user_id_qs.rowcount:
+             __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'user with not found'}))
         user_id = user_id_qs.fetchone()[0]
@@ -424,15 +477,17 @@ def unfollow(request):
     try:
         __cursor.execute(delete_following_relationship_query, users)  
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))  
     
     try:
         user, related_ids = get_user_by_id(__cursor, users[0])
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))
 
@@ -444,10 +499,13 @@ update_profile_query = '''UPDATE user
                           SELECT id FROM user
                           WHERE email = %s;'''
 
+@csrf_exempt
 def updateProfile(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': str(value_err)}))
     
@@ -456,23 +514,26 @@ def updateProfile(request):
         name = unicode(json_request['message'])
         email = unicode(json_request['user'])
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))    
 
 
     try:
-        user_qs = __cursor.execute(update_profile_query, [about, name, emai, email])
+        user_qs = __cursor.execute(update_profile_query, [about, name, email, email])
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': str(db_err)}))
  
     user_id = user_qs.fetchone()[0]
     try:
-        user = get_user_by_id(__cursor, user_id)
+        user, related_ids = get_user_by_id(__cursor, user_id)
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))    
 
