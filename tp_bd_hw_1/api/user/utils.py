@@ -43,6 +43,6 @@ def get_user_by_id(cursor, user_id):
     subscriptions_qs = cursor.execute(get_user_subscriptions_query, [user_id, ])
     if subscriptions_qs.rowcount:
         result_user["subscriptions"].extend([subscription[0] for subscription in  subscriptions_qs.fetchall()])
-    return result_user
+    return result_user, {}
 
 

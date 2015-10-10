@@ -110,7 +110,7 @@ def details(request):
                                        'response': 'incorrect related parameter: {}'.format(related)}))
         user_id = forum[4]
         try:
-            user = get_user_by_id(__cursor, user_id)
+            user, related_ids = get_user_by_id(__cursor, user_id)
         except DatabaseError as db_err: 
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)}))
@@ -210,11 +210,8 @@ def listPosts(request):
 
         for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
             get_related_info_func = related_functions_dict[related_]
-            posts[-1][related_] = get_related_info_func(related_ids[related_])
+            posts[-1][related_], related_ids_ = get_related_info_func(related_ids[related_])
              
-            
-             
-        
     return HttpResponse(dumps({'code': codes.OK,
                                'response': posts
                                }))
@@ -233,7 +230,7 @@ get_all_forum_threads_query = '''SELECT thread.date, thread.dislikes, forum.shor
                                              GROUP BY thread_id) posts ON posts.thread_id = thread.id
                                  WHERE thread.forum_id = %s
                             '''
-def listPosts(request):
+def listThreads(request):
     if request.method != 'GET':
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
@@ -309,7 +306,7 @@ def listPosts(request):
 
         for related_ in filter(lambda x: x in related_functions_dict.keys() and x != 'thread', related):
             get_related_info_func = related_functions_dict[related_]
-            threads[-1][related_] = get_related_info_func(related_ids[related_])      
+            threads[-1][related_], related_ids_ = get_related_info_func(related_ids[related_])      
         
     return HttpResponse(dumps({'code': codes.OK,
                                'response': threads
@@ -367,13 +364,13 @@ def listPosts(request):
         query_params.append(limit)
 
     try:
-        users_qs = __cursor.execute(get_all_forum_threads_specified_query, query_params) 
+        users_qs = __cursor.execute(get_all_forum_users_specified_query, query_params) 
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     users = []
     for user in users_qs.fetchall():
-        users.append(get_user_by_id(user[0]))  
+        users.append(get_user_by_id(user[0])[0])  
         
     return HttpResponse(dumps({'code': codes.OK,
                                'response': users

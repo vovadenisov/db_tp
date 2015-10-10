@@ -157,7 +157,7 @@ def follow(request):
                                    'response': unicode(db_err)}))  
     
     try:
-        user = get_user_by_id(__cursor, users[0])
+        user, related_id = get_user_by_id(__cursor, users[0])
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
@@ -225,7 +225,7 @@ def listFollowers(request):
     if user_ids_qs.rowcount:
         for user_id in user_ids_qs.fetchall():
             try:
-                user = get_user_by_id(__cursor, users[0])
+                user, rekated_ids = get_user_by_id(__cursor, users[0])
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))  
@@ -294,7 +294,7 @@ def listFollowings(request):
     if user_ids_qs.rowcount:
         for user_id in user_ids_qs.fetchall():
             try:
-                user = get_user_by_id(__cursor, users[0])
+                user, related_ids = get_user_by_id(__cursor, users[0])
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))  
@@ -428,7 +428,7 @@ def unfollow(request):
                                    'response': unicode(db_err)}))  
     
     try:
-        user = get_user_by_id(__cursor, users[0])
+        user, related_ids = get_user_by_id(__cursor, users[0])
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
@@ -468,7 +468,7 @@ def updateProfile(request):
  
     user_id = user_qs.fetchone()[0]
     try:
-        user = get_user_by_id(__cursor, user_id)
+        user, related_ids = get_user_by_id(__cursor, user_id)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 

@@ -103,7 +103,7 @@ def create(request):
 
     #validate thread
     try:
-        thread_id_qs = __cursor.execute(get_thread_by_id_query, [thread_id, ])  
+        thread_id_qs, realted_ids = __cursor.execute(get_thread_by_id_query, [thread_id, ])  
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
@@ -129,14 +129,14 @@ def create(request):
        if optional_arg_value is not None:
            if not isinstance(optional_arg_value, bool):
                return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
-                                          'response': 'message should not be empty'})) 
+                                          'response': 'optional flag should be bool'})) 
                query_params.append([optional_arg_name, optional_arg_value])
 
     parent_id = request.GET.get('parent')
     with transaction.atomic():
         if parent_id:
             try:
-                post_qs = __cursor.execute(get_post_by_id_and_update_query, [parent_id, parent_id])  
+                post_qs, related_ids = __cursor.execute(get_post_by_id_and_update_query, [parent_id, parent_id])  
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))
@@ -181,14 +181,14 @@ def create(request):
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
-    flag, post, realted_ids = get_post_by_id(__cursor, post_id)
-    if flag:
-        return HttpResponse(dumps({'code': codes.OK,
-                                   'response': post}))
-    else:
+    try:
+         post, realted_ids = get_post_by_id(__cursor, post_id)
+    except TypeError:
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                   'response': post})) 
+                                   'response': post}))
+    return HttpResponse(dumps({'code': codes.OK,
+                               'response': post}))
+ 
 
 
 ## DETAILS ##
@@ -204,19 +204,18 @@ def details(request):
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'post id should be int'})) 
     try:
-        flag, post, related_ids = get_post_by_id(__cursor, post_id) 
-        if not flag:
-             return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                        'response': 'forum not found'}))
+        post, related_ids = get_post_by_id(__cursor, post_id) 
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
+    except TypeError:
+         return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                    'response': 'forum not found'}))
     related = request.GET.getlist('related')
 
     for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
         get_related_info_func = related_functions_dict[related_]
-        post[related_] = get_related_info_func(related_ids[related_]) 
+        post[related_], related_ids_ = get_related_info_func(related_ids[related_]) 
         
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
@@ -301,7 +300,8 @@ def list_posts(request):
         query_params.append(limit)
 
     try:
-        post_list_qs = __cursor.execute(get_post_list_query.format(related_table_name), query_params)
+        post_list_qs = __cursor.execute(get_post_list_specified_query.format(related_table_name), 
+                                        query_params)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
@@ -422,7 +422,7 @@ def update(request):
         if not post_id_qs.rowcount:
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'}))
-        flag, post, related_obj = get_post_by_id(__cursor, post_id)
+        post, related_obj = get_post_by_id(__cursor, post_id)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
@@ -471,10 +471,10 @@ def vote(request):
         if not post_id_qs.rowcount:
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'}))
-        flag, post, related_obj = get_post_by_id(__cursor, post_id)
+        post, related_obj = get_post_by_id(__cursor, post_id)
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
-                                   'response': unicode(db_err)})) 
+                                   'response': unicode(db_err)}))     
 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))

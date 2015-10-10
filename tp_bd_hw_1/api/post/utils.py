@@ -16,8 +16,6 @@ get_post_by_id_query = ''' SELECT post.date, post.dislikes, forum.short_name, po
 
 def get_post_by_id(cursor, post_id):
     post_qs = cursor.execute(get_post_by_id_query, [post_id, ])
-    if not post_qs.rowcount:
-        return False, "post not found", None
     post = post_qs.fetchone()
     return True, 
         {

@@ -157,7 +157,7 @@ def follow(request):
                                    'response': unicode(db_err)}))  
     
     try:
-        user = get_user_by_id(__cursor, users[0])
+        user, related_id = get_user_by_id(__cursor, users[0])
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
@@ -225,7 +225,7 @@ def listFollowers(request):
     if user_ids_qs.rowcount:
         for user_id in user_ids_qs.fetchall():
             try:
-                user = get_user_by_id(__cursor, users[0])
+                user, rekated_ids = get_user_by_id(__cursor, users[0])
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))  
@@ -294,7 +294,7 @@ def listFollowings(request):
     if user_ids_qs.rowcount:
         for user_id in user_ids_qs.fetchall():
             try:
-                user = get_user_by_id(__cursor, users[0])
+                user, related_ids = get_user_by_id(__cursor, users[0])
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))  
@@ -428,7 +428,7 @@ def unfollow(request):
                                    'response': unicode(db_err)}))  
     
     try:
-        user = get_user_by_id(__cursor, users[0])
+        user, related_ids = get_user_by_id(__cursor, users[0])
     except DatabaseError as db_err: 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
@@ -436,7 +436,43 @@ def unfollow(request):
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))
 
+## UPDATE PROFILE ##
+update_profile_query = '''UPDATE user
+                          SET about = %,
+                              name = %s,
+                          WHERE email = %s;
+                          SELECT id FROM user
+                          WHERE email = %s;'''
+
 def updateProfile(request):
-    result = {}
-    return HttpResponse(dumps(result))
+    try:
+        json_request = loads(request.body) 
+    except ValueError as value_err:
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
+                                   'response': str(value_err)}))
+    
+    try:
+        about = unicode(json_request['about'])
+        name = unicode(json_request['message'])
+        email = unicode(json_request['user'])
+    except KeyError as key_err:
+        return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                   'response': 'Not found: {}'.format(str(key_err))}))    
+
+
+    try:
+        user_qs = __cursor.execute(update_profile_query, [about, name, emai, email])
+    except DatabaseError as db_err: 
+        return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
+                                   'response': str(db_err)}))
+ 
+    user_id = user_qs.fetchone()[0]
+    try:
+        user = get_user_by_id(__cursor, user_id)
+    except DatabaseError as db_err: 
+        return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
+                                   'response': unicode(db_err)})) 
+
+    return HttpResponse(dumps({'code': codes.OK,
+                               'response': user}))    
 
