@@ -289,10 +289,127 @@ def list_threads(request):
             })
     return HttpResponse(dumps({'code': codes.OK,
                                'response': posts})) 
+## LIST POSTS ##
+get_all_thread_posts_query = '''SELECT post.date, post.dislikes, forum.short_name,
+                                      post.id, post.isApproved, post.isDeleted, post.isEdited,
+                                      post.isHighlighted, post.isSpam, post.likes, post.message, post.parent,
+                                      post.likes - post.dislikes as points, post.thread_id, user.email,
+                                      forum.id, thread.id, user.id,
+                                      post.hierarchy_id
+                                FROM post INNER JOIN forum ON post.forum_id = forum.id
+                                INNER JOIN user ON user.id = post.user_id
+                                WHERE post.thread_id = %s
+                            '''
 
+get_thread_posts_number = '''SELECT head_posts_number
+                             FROM post_hierarchy_utils
+                             WHERE thread_id = %s;  
+                          '''
 def listPosts(request):
-    result = {}
-    return HttpResponse(dumps(result))
+    if request.method != 'GET':
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
+                                   'response': 'request method should be GET'}))
+    thread = request.GET.get('thread')
+    thread_id = general_utils.validate_id(thread)
+    if thread_id is None:
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
+                                   'response': 'thread id is required'})
+    if thread_id == False:
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
+                                   'response': 'thread id should be int'})
+    try:
+       thread_id_qs = __cursor.execute(get_thread_id_by_id, [thread_id,]) 
+    except DatabaseError as db_err: 
+        return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
+                                   'response': unicode(db_err)}))
+    if not thread_id_qs.rowcount:
+        return HttpResponse(dumps({'code': codes.INVALID_QUERY,
+                                   'response': 'thread was not found'}) 
+    thread_id = thread_id_qs.fetchone()[0] 
+
+    get_all_posts_specified_posts_query = get_all_thread_posts_query
+    query_params = [forum_id, ]
+    since_date = general_utils.validate_date(request.GET.get('since'))
+    if since_date:
+        get_all_forum_posts_specified_query += '''AND post.date >= %s '''
+        query_params.append(since_date)
+    elif since_date == False and since_date is not None:
+        return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                   'response': 'incorrect since_date fromat'}))
+
+    order = request.GET.get('order', 'desc')
+    if order.lower() not in ('asc', 'desc'):
+        return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                   'response': 'incorrect order parameter: {}'.format(order)}))
+    
+    get_all_posts_query_postfix = '''ORDER BY post.{} ''' + order
+
+    sort = request.GET.get('sort', 'flat')
+    if sort.lower() not in ('flat', 'tree', 'parent_tree'):
+        return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                   'response': 'incorrect sort parameter: {}'.format(sort)}))
+
+    if sort == 'flat':
+        get_all_posts_query_postfix = get_all_posts_query_postfix.format('date')
+    else
+        get_all_posts_query_postfix = get_all_posts_query_postfix.format('hierarchy_id')
+
+    limit = request.GET.get('limit')
+    if limit:
+        try:
+            limit = int(limit)
+        except ValueError:
+             return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                        'response': 'limit should be int'}))
+        if sort == 'flat' or sort == 'tree':
+            get_all_posts_specified_query += get_all_posts_query_postfix + ''' LIMIT %s'''
+            query_params.append(limit)
+        else:
+            if order == 'asc':
+                operation = '<='
+            else:
+                operation = '>='
+                try:
+                     max_posts_number_qs = __cursor.execute(get_thread_posts_number, [thread_id,]) 
+                except DatabaseError as db_err: 
+                     return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
+                                                'response': unicode(db_err)}))
+                max_posts_number = max_posts_number_qs.fetchone()[0]
+                limit = max_posts_number - limit + 1
+                if limit < 1:
+                    limit = 1
+            get_all_posts_specified_query += "AND SUBSTR(post.hierarchy_id, 1, 1) {} '{}'".format(operation, limit) + \
+                                              get_all_posts_query_postfix
+
+    try:
+        posts_qs = __cursor.execute(get_all_posts_specified_query, query_params) 
+    except DatabaseError as db_err: 
+        return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
+                                   'response': unicode(db_err)})) 
+    
+    posts = []
+    for post in posts_qs.fetchall():
+        posts.append({
+            "date": post[0],
+            "dislikes": post[1],
+            "forum": post[2],
+            "id": post[3],
+            "isApproved": post[4],
+            "isDeleted": post[5],
+            "isEdited": post[6],
+            "isHighlighted": post[7],
+            "isSpam": post[8],
+            "likes": post[9],
+            "message": post[10],
+            "parent": post[11],
+            "points": post[12],
+            "thread": post[13], 
+            "user": post[14]
+            })
+             
+    return HttpResponse(dumps({'code': codes.OK,
+                               'response': posts
+                               }))
 
 ## OPEN
 select_and_close_thread_by_id_query = '''SELECT id FROM thread WHERE id = %s;
@@ -415,7 +532,7 @@ def subscribe(request):
     
     try:
         email = unicode(json_request['user'])
-        thread = unicode(json_request['thread'])
+        thread = json_request['thread']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))  
@@ -472,7 +589,7 @@ def unsubscribe(request):
     
     try:
         email = unicode(json_request['user'])
-        thread = unicode(json_request['thread'])
+        thread = json_request['thread']
     except KeyError as key_err:
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))  

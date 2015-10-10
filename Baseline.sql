@@ -103,7 +103,7 @@ CREATE TABLE followers
   CONSTRAINT followers_following_id_foreign_key FOREIGN KEY(following_id) REFERENCES user(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=INNODB;
 
---Сквозная нумерация постов в рамках одного форума
+--Сквозная нумерация постов в рамках одного thread
 CREATE TABLE post_hierarchy_utils
 (
   id INT NOT NULL AUTO_INCREMENT,

@@ -39,14 +39,14 @@ get_post_by_id_and_update_query = '''UPDATE post
 
 get_max_post_and_update_query = '''UPDATE post_hierarchy_utils
                                    SET head_posts_number = head_posts_number + 1
-                                   WHERE forum_id = %s;
+                                   WHERE thread_id = %s;
                                    SELECT head_posts_number
                                    FROM post_hierarchy_utils
-                                   WHERE forum_id = %s; 
+                                   WHERE thread_id = %s; 
                                 '''
 
 get_max_post_and_insert_query = u'''INSERT INTO post_hierarchy_utils
-                                   (forum_id, head_posts_number)
+                                   (thread_id, head_posts_number)
                                    VALUES
                                    (%s, 1);
                                    SELECT head_posts_number
@@ -111,6 +111,7 @@ def create(request):
     if not thread_id_qs.rowcount:
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'thread not found'}))
+    thread_id = thread_id_qs.fetchone()[0]
     #validate date
     date = general_utils.validate_date(date)
     if not date:
@@ -148,13 +149,13 @@ def create(request):
             hierarchy_id = post[2] + unicode(post[1]) + '/'    
         else:
             try:
-                max_post_qs = __cursor.execute(get_max_post_and_update_query, [parent_id, parent_id])  
+                max_post_qs = __cursor.execute(get_max_post_and_update_query, [thread_id, thread_id])  
             except DatabaseError as db_err: 
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))
 
             if not max_post_qs.rowcount:
-                max_post_qs = __cursor.execute(get_max_post_and_insert_query, [parent_id, parent_id])  
+                max_post_qs = __cursor.execute(get_max_post_and_insert_query, [thread_id, thread_id])  
 
             post = max_post_qs.fetchone()
             hierarchy_id = unicode(post[0]) + '/'
@@ -418,7 +419,7 @@ def update(request):
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'post id should be int'})) 
     try:
-        post_id_qs = __cursor.execute(update_post_message_query, [post_id, message, post_id]) 
+        post_id_qs = __cursor.execute(update_post_message_query, [message, post_id, post_id]) 
         if not post_id_qs.rowcount:
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'}))
