@@ -9,7 +9,8 @@ get_forum_by_id_query = '''SELECT forum.id, forum.name, forum.short_name, user.e
                         '''
 
 def get_forum_by_id(cursor, forum_id):
-    forum = cursor.execute(get_forum_by_id_query, [forum_id, ]).fetchone()
+    cursor.execute(get_forum_by_id_query, [forum_id, ])
+    forum = cursor.fetchone()
     return {"id": forum[0],
             "name": forum[1],
             "short_name": forum[2],

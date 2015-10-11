@@ -16,11 +16,13 @@ related_functions_dict = {'user': get_user_by_id,
                           }
 
 ## CLOSE ##
-select_and_close_thread_by_id_query = '''SELECT id FROM thread WHERE id = %s;
-                                          UPDATE thread
-                                          SET isClosed = True
-                                          WHERE id = %s;
-                                       '''
+select_thread_by_id_query = '''SELECT id FROM thread WHERE id = %s'''
+
+close_thread_query = '''
+                        UPDATE thread
+                        SET isClosed = True
+                        WHERE id = %s;
+                     '''
 
 @csrf_exempt 
 def close_thread(request):
@@ -40,16 +42,17 @@ def close_thread(request):
                                    'response': 'Not found: {}'.format(unicode(key_err))}))    
    
     try:
-        thread_id_qs = __cursor.execute(select_and_close_thread_by_id_query, [thread_id, thread_id])  
+        __cursor.execute(select_thread_by_id_query, [thread_id, ]) 
+        if not __cursor.rowcount:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                       'response': 'thread not found'}))
+        __cursor.execute(close_thread_query, [thread_id, ])
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
-    if not thread_id_qs.rowcount:
-        __cursor.close()
-        return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                   'response': 'thread not found'}))
     __cursor.close() 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {
@@ -61,6 +64,8 @@ create_thread_query = '''INSERT INTO thread
                          (forum_id, title, isClosed, user_id, date, message, slug)
                          VALUES
                          (%s, %s, %s, %s, %s, %s, %s)
+                      '''
+select_last_id =      '''
                          SELECT LAST_INSERT_ID();
                       '''
 update_thread_is_deleted_query = '''UPDATE thread
@@ -109,25 +114,25 @@ def create(request):
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
-    if not user_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
-    user_id = user_id_qs.fetchone()[0]
+    user_id = __cursor.fetchone()[0]
     
     # validate forum
     try:
-        forum_id_qs = __cursor.execute(get_forum_by_short_name_query, [forum, ])  
+        __cursor.execute(get_forum_by_short_name_query, [forum, ])  
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
-    if not forum_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'forum not found'}))
-    forum_id = forum_id_qs.fetchone()[0]
+    forum_id = __cursor.fetchone()[0]
 
     #validate date
     date = general_utils.validate_date(date)
@@ -155,13 +160,14 @@ def create(request):
     #validate is_closed
     is_closed = bool(is_closed)
     try:
-        thread_qs = __cursor.execute(create_thread_query, [forum_id, title, is_closed, 
-                                                           user_id, date, message, slug])
+        __cursor.execute(create_thread_query, [forum_id, title, is_closed, 
+                                               user_id, date, message, slug])
+        __cursor.execute(select_last_id, [])
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
-    thread_id = thread_qs.fetchone()[0]
+    thread_id = __cursor.fetchone()[0]
 
     is_deleted = json_request.get('isDeleted')
     if is_deleted is not None:
@@ -187,15 +193,16 @@ def create(request):
                                     "title": title,
                                     "user": email
                                 }}))
-## DETAILS
+                                
 
+## DETAILS
 def details(request):
     __cursor = connection.cursor()
     if request.method != 'GET':
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'request method should be GET'}))
-    thread_id = general_utils.validate_id(request.GET.get('post'))
+    thread_id = general_utils.validate_id(request.GET.get('thread'))
     if thread_id is None:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
@@ -216,11 +223,10 @@ def details(request):
                                    'response': 'thread doesn\'t exist'}))
 
     related = request.GET.getlist('related')
-
     for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
         if related_ != 'thread':
              get_related_info_func = related_functions_dict[related_]
-             thread[related_], related_ids = get_related_info_func(related_ids[related_]) 
+             thread[related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_]) 
     __cursor.close()        
     return HttpResponse(dumps({'code': codes.OK,
                                'response': thread}))
@@ -271,8 +277,8 @@ def list_threads(request):
         related_query = get_forum_id_by_short_name 
         related_params = [short_name, ]     
     try:
-        id_qs = __cursor.execute(related_query, related_params) 
-        if not id_qs.rowcount:
+        id_qs = __cursor.execute(related_query, related_params)
+        if not __cursor.rowcount:
             __cursor.close()
             return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                        'response': '{} not found'.format(related_table_name)})) 
@@ -280,7 +286,7 @@ def list_threads(request):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-    related_id = id_qs.fetchone()[0]
+    related_id = id_qs[0]
     query_params = [related_id, ]
     get_thread_list_specified_query = get_all_threads_query
     since_date = general_utils.validate_date(request.GET.get('since'))
@@ -320,14 +326,14 @@ def list_threads(request):
                                    'response': unicode(db_err)})) 
     
     threads = []
-    for thread in threads_qs.fetchall():
+    for thread in __cursor.fetchall():
         threads.append({
-            "date": thread[0],
+            "date": thread[0].strftime("%Y-%m-%d %H:%M:%S") ,
             "dislikes": thread[1],
             "forum": thread[2],
             "id": thread[3],
-            "isClosed": thread[4],
-            "isDeleted": thread[5],
+            "isClosed": not not thread[4],
+            "isDeleted": not not thread[5],
             "likes": thread[6],
             "message": thread[7],
             "points": thread[8],
@@ -379,11 +385,11 @@ def listPosts(request):
         __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-    if not thread_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'thread was not found'})) 
-    thread_id = thread_id_qs.fetchone()[0] 
+    thread_id = __cursor.fetchone()[0] 
 
     get_all_posts_specified_posts_query = get_all_thread_posts_query
     query_params = [thread_id, ]
@@ -437,7 +443,10 @@ def listPosts(request):
                     __cursor.close()
                     return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                                 'response': unicode(db_err)}))
-                max_posts_number = max_posts_number_qs.fetchone()[0]
+                if __cursor.rowcount:
+                    max_posts_number = __cursor.fetchone()[0]
+                else:
+                    max_posts_number = 0     
                 limit = max_posts_number - limit + 1
                 if limit < 1:
                     limit = 1
@@ -452,9 +461,9 @@ def listPosts(request):
                                    'response': unicode(db_err)})) 
     
     posts = []
-    for post in posts_qs.fetchall():
+    for post in __cursor.fetchall():
         posts.append({
-            "date": post[0],
+            "date": post[0].strftime("%Y-%m-%d %H:%M:%S") ,
             "dislikes": post[1],
             "forum": post[2],
             "id": post[3],
@@ -476,11 +485,10 @@ def listPosts(request):
                                }))
 
 ## OPEN
-select_and_open_thread_by_id_query = '''SELECT id FROM thread WHERE id = %s;
-                                          UPDATE thread
-                                          SET isClosed = False
-                                          WHERE id = %s;
-                                       ''' 
+open_thread_by_id_query = '''UPDATE thread
+                             SET isClosed = False
+                             WHERE id = %s;
+                          ''' 
 @csrf_exempt
 def open_thread(request):
     __cursor = connection.cursor()
@@ -499,16 +507,16 @@ def open_thread(request):
                                    'response': 'Not found: {}'.format(unicode(key_err))}))    
    
     try:
-        thread_id_qs = __cursor.execute(select_and_open_thread_by_id_query, [thread_id, thread_id])  
+        __cursor.execute(select_thread_by_id_query, [thread_id, ]) 
+        if not __cursor.rowcount:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                       'response': 'thread not found'}))
+        thread_id_qs = __cursor.execute(select_and_open_thread_by_id_query, [thread_id, ])  
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
-    if not thread_id_qs.rowcount:
-        __cursor.close()
-        return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                   'response': 'thread not found'}))
     __cursor.close() 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {
@@ -516,11 +524,10 @@ def open_thread(request):
                                 }})) 
 
 ## REMOVE
-select_and_remove_thread_by_id_query = '''SELECT id FROM thread WHERE id = %s;
-                                          UPDATE thread
-                                          SET isDeleted = True
-                                          WHERE id = %s;
-                                       ''' 
+remove_thread_by_id_query = '''UPDATE thread
+                               SET isDeleted = True
+                               WHERE id = %s;
+                            ''' 
 
 @csrf_exempt
 def remove(request):
@@ -538,18 +545,17 @@ def remove(request):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(unicode(key_err))}))    
-   
     try:
-        thread_id_qs = __cursor.execute(select_and_remove_thread_by_id_query, [thread_id, thread_id])  
+        __cursor.execute(select_thread_by_id_query, [thread_id, ]) 
+        if not __cursor.rowcount:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                       'response': 'thread not found'}))
+        __cursor.execute(remove_thread_by_id_query, [thread_id, ])  
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
-    if not thread_id_qs.rowcount:
-        __cursor.close()
-        return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                   'response': 'thread not found'}))
     __cursor.close() 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {
@@ -557,11 +563,10 @@ def remove(request):
                                 }})) 
 
 ## RESTORE
-select_and_restore_thread_by_id_query = '''SELECT id FROM thread WHERE id = %s;
-                                           UPDATE thread
-                                           SET isDeleted = False
-                                           WHERE id = %s;
-                                       ''' 
+restore_thread_by_id_query = '''UPDATE thread
+                                SET isDeleted = False
+                                WHERE id = %s;
+                             ''' 
 @csrf_exempt
 def restore(request):
     __cursor = connection.cursor()
@@ -580,16 +585,16 @@ def restore(request):
                                    'response': 'Not found: {}'.format(unicode(key_err))}))    
    
     try:
-        thread_id_qs = __cursor.execute(select_and_restore_thread_by_id_query, [thread_id, thread_id])  
+        __cursor.execute(select_thread_by_id_query, [thread_id, ]) 
+        if not __cursor.rowcount:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                       'response': 'thread not found'}))
+        __cursor.execute(restore_thread_by_id_query, [thread_id, ]) 
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
-    if not thread_id_qs.rowcount:
-        __cursor.close()
-        return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                   'response': 'thread not found'}))
     __cursor.close() 
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {
@@ -603,8 +608,6 @@ create_subscription_query = '''INSERT INTO subscriptions
                                VALUES
                                (%s, %s)
                             '''
-get_thread_id_by_id = '''SELECT id FROM post
-                         WHERE id = %s'''
 
 @csrf_exempt
 def subscribe(request):
@@ -626,16 +629,16 @@ def subscribe(request):
 
     # validate user
     try:
-        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
+        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])
     except DatabaseError as db_err:
         __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)}))
-    if not user_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                     'response': 'user with not found'}))
-    user_id = user_id_qs.fetchone()[0]
+    user_id = __cursor.fetchone()[0]
 
     #validate thread
     thread_id = general_utils.validate_id(thread)
@@ -649,11 +652,11 @@ def subscribe(request):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-    if not thread_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'thread was not found'})) 
-    thread_id = thread_id_qs.fetchone()[0]  
+    thread_id = __cursor.fetchone()[0]  
       
     try:
         __cursor.execute(create_subscription_query, user_id, thread_id)  
@@ -676,9 +679,11 @@ delete_subscription_query = '''DELETE FROM subscriptions
 
 @csrf_exempt
 def unsubscribe(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': str(value_err)}))
     
@@ -686,41 +691,48 @@ def unsubscribe(request):
         email = unicode(json_request['user'])
         thread = json_request['thread']
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(str(key_err))}))  
 
     # validate user
     try:
-        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
+        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ]) 
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)}))
-    if not user_id_qs.rowcount:
+    if not __cursor.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                     'response': 'user with not found'}))
-    user_id = user_id_qs.fetchone()[0]
+    user_id = __cursor.fetchone()[0]
 
     #validate thread
     thread_id = general_utils.validate_id(thread)
     if thread_id == False:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'thread id should be int'}))
     try:
-       thread_id_qs = __cursor.execute(get_thread_id_by_id, [thread_id,]) 
+       thread_id_qs = __cursor.execute(get_thread_id_by_id, [thread_id,]).fetchone() 
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-    if not thread_id_qs.rowcount:
+    if not __cursor.rowcount:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'thread was not found'}))
-    thread_id = thread_id_qs.fetchone()[0]  
+    thread_id = __cursor.fetchone()[0]  
       
     try:
         __cursor.execute(delete_subscription_query, [thread_id, user_id])  
     except DatabaseError as db_err: 
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))  
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': {"thread": thread_id,
                                             "user": email}}))
@@ -728,17 +740,19 @@ def unsubscribe(request):
 
 ## UPDATE ##
 update_thread_message_query = u'''UPDATE thread
-                                SET message = %s,
+                                  SET message = %s,
                                     slug = %s,
-                                WHERE id = %s;
-                                SELECT id FROM thread
-                                WHERE id = %s;'''
+                                  WHERE id = %s;
+                               '''
+
 
 @csrf_exempt
 def update(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': unicode(value_err)}))   
     try:
@@ -746,24 +760,29 @@ def update(request):
         message = unicode(json_request['message'])
         slug = unicode(json_request['slug'])
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(unicode(key_err))}))
 
     thread_id = general_utils.validate_id(thread_id) 
     if thread_id == False:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'thread id should be int'})) 
     try:
+        __cursor.execute(select_thread_by_id_query, [thread_id, ]) 
+        if not __cursor.rowcount:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                       'response': 'thread not found'}))
         thread_id_qs = __cursor.execute(update_thread_message_query, 
-                                        [message, slug, thread_id, thread_id]) 
-        if not thread_id_qs.rowcount:
-             return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                        'response': 'thread not found'}))
+                                        [message, slug, thread_id, ]) 
         thread, related_obj = get_thread_by_id(__cursor, thread_id)
-    except DatabaseError as db_err: 
+    except DatabaseError as db_err:
+        __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': thread}))
 
@@ -771,26 +790,28 @@ def update(request):
 update_thread_votes_request = '''UPDATE thread
                                  SET {} = {} + 1
                                  WHERE id = %s;
-                                 SELECT id FROM thread
-                                 WHERE id = %s;
                             '''
 
 @csrf_exempt
 def vote(request):
+    __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
     except ValueError as value_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': unicode(value_err)}))   
     try:
         thread_id = json_request['thread']
         vote = json_request['vote']
     except KeyError as key_err:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'Not found: {}'.format(unicode(key_err))}))
 
     thread_id = general_utils.validate_id(thread_id) 
     if thread_id == False:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'post id should be int'}))
     try:
@@ -798,6 +819,7 @@ def vote(request):
         if abs(vote) != 1:
             raise ValueError
     except ValueError:
+        __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect vote value'})) 
     if vote < 0:
@@ -806,14 +828,17 @@ def vote(request):
         column_name = 'likes'
   
     try:
-        thread_id_qs = __cursor.execute(update_thread_votes_request.format(column_name), [thread_id, thread_id]) 
-        if not thread_id_qs.rowcount:
-             return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                        'response': 'thread not found'}))
+        __cursor.execute(select_thread_by_id_query, [thread_id, ]) 
+        if not __cursor.rowcount:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                       'response': 'thread not found'}))
+        thread_id_qs = __cursor.execute(update_thread_votes_request.format(column_name), [thread_id, ])
         thread, related_obj = get_thread_by_id(__cursor, thread_id)
-    except DatabaseError as db_err: 
+    except DatabaseError as db_err:
+        __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))     
-
+    __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': thread}))

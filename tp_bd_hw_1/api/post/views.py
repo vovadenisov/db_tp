@@ -29,33 +29,38 @@ get_thread_by_id_query = '''SELECT id FROM thread
                             WHERE id = %s;
                          '''
 
-get_post_by_id_and_update_query = '''UPDATE post
-                                     SET child_posts_count = child_posts_count + 1
-                                     WHERE id = %s;
-                                     SELECT id, child_posts_count, hierarchy_id FROM post
-                                     WHERE id = %s;
+update_post_children_count_query = '''UPDATE post
+                                      SET child_posts_count = child_posts_count + 1
+                                      WHERE id = %s;
                                   '''
+                                   
+get_parent_post_hierarhchy_info =  '''SELECT id, child_posts_count, hierarchy_id FROM post
+                                      WHERE id = %s;
+                                    '''
 
-get_max_post_and_update_query = '''UPDATE post_hierarchy_utils
+update_max_post_mumber = '''       UPDATE post_hierarchy_utils
                                    SET head_posts_number = head_posts_number + 1
                                    WHERE thread_id = %s;
+                                '''
+select_last_top_post_number = '''
                                    SELECT head_posts_number
                                    FROM post_hierarchy_utils
                                    WHERE thread_id = %s; 
                                 '''
 
-get_max_post_and_insert_query = u'''INSERT INTO post_hierarchy_utils
+insert_max_post_number_query = u'''INSERT INTO post_hierarchy_utils
                                    (thread_id, head_posts_number)
                                    VALUES
                                    (%s, 1);
-                                   SELECT head_posts_number
-                                   FROM post_hierarchy_utils
-                                   WHERE thread_id = %s; 
                                 '''
+                                
 create_post_base_query = u'''INSERT INTO post 
                             (hierarchy_id, date, message, user_id, forum_id, thread_id, parent_id)
                             VALUES
-                            (%s, %s, %s, %s, %s, %s);
+                            (%s, %s, %s, %s, %s, %s, %s);
+                           '''
+                           
+select_last_insert_id =  '''
                             SELECT LAST_INSERT_ID();
                          '''
 update_post_query_prefix = '''UPDATE post SET '''
@@ -82,45 +87,44 @@ def create(request):
                                    'response': 'Not found: {}'.format(unicode(key_err))}))    
     # validate user
     try:
-        user_id_qs = __cursor.execute(get_user_by_email_query, [email, ])  
+        __cursor.execute(get_user_by_email_query, [email, ])  
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
 
-    if not user_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'user not found'}))
-    user_id = user_id_qs.fetchone()[0]
+    user_id = __cursor.fetchone()[0]
     
     # validate forum
     try:
-        forum_id_qs = __cursor.execute(get_forum_by_short_name_query, [forum, ])  
+        __cursor.execute(get_forum_by_short_name_query, [forum, ])  
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
-    if not forum_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'forum not found'}))
-    forum_id = forum_id_qs.fetchone()[0]
+    forum_id = __cursor.fetchone()[0]
 
     #validate thread
     try:
-        thread_id_qs, realted_ids = __cursor.execute(get_thread_by_id_query, [thread_id, ])  
+        __cursor.execute(get_thread_by_id_query, [thread_id, ])  
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-
-    if not thread_id_qs.rowcount:
+    if not __cursor.rowcount:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                    'response': 'thread not found'}))
-    thread_id = thread_id_qs.fetchone()[0]
+    thread_id = __cursor.fetchone()[0]
+    
     #validate date
     date = general_utils.validate_date(date)
     if not date:
@@ -137,51 +141,55 @@ def create(request):
     query_params = [] 
     optional_args = ['isApproved', 'isDeleted', 'isEdited', 'isHighlighted', 'isSpam']
     for optional_arg_name in optional_args:
-       optional_arg_value = request.GET.get(optional_arg_name)
+       optional_arg_value = json_request.get(optional_arg_name)
        if optional_arg_value is not None:
+           #print optional_arg_name, optional_arg_value
            if not isinstance(optional_arg_value, bool):
                __cursor.close()
                return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                           'response': 'optional flag should be bool'})) 
-               query_params.append([optional_arg_name, optional_arg_value])
+           query_params.append([optional_arg_name, optional_arg_value])
 
     parent_id = request.GET.get('parent')
     with transaction.atomic():
         if parent_id:
             try:
-                post_qs, related_ids = __cursor.execute(get_post_by_id_and_update_query, [parent_id, parent_id])  
+                __cursor.execute(get_parent_post_hierarhchy_info, [parent_id, ]) 
+                if not __cursor.rowcount:
+                     __cursor.close()
+                     return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                                'response': 'parent post not found'})) 
+                __cursor.execute(update_post_children_count_query, [parent_id, ])
             except DatabaseError as db_err: 
                 __cursor.close()
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))
-
-            if not post_qs.rowcount:
-                __cursor.close()
-                return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                           'response': 'parent post not found'}))
-            post = post_qs.fetchone()
-            hierarchy_id = post[2] + unicode(post[1]) + '/'    
+            post = __cursor.fetchone()
+            hierarchy_id = post[2] + unicode(post[1] + 1) + '/'    
         else:
             try:
-                max_post_qs = __cursor.execute(get_max_post_and_update_query, [thread_id, thread_id])  
+                __cursor.execute(select_last_top_post_number, [thread_id, ])
+                if not __cursor.rowcount:
+                     __cursor.execute(insert_max_post_number_query, [thread_id,])
+                     post_number = 1
+                else:
+                     post_number = __cursor.fetchone()[0] + 1
+                     __cursor.execute(update_max_post_mumber, [thread_id,])
             except DatabaseError as db_err: 
                 __cursor.close()
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))
-
-            if not max_post_qs.rowcount:
-                max_post_qs = __cursor.execute(get_max_post_and_insert_query, [thread_id, thread_id])  
-
-            post = max_post_qs.fetchone()
-            hierarchy_id = unicode(post[0]) + '/'
+            hierarchy_id = unicode(post_number) + '/'
+            
         try:
             post_qs = __cursor.execute(create_post_base_query, [hierarchy_id, date, message,
                                                                 user_id, forum_id, thread_id, parent_id])
+            __cursor.execute(select_last_insert_id, [])
         except DatabaseError as db_err: 
             __cursor.close()
             return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                        'response': unicode(db_err)})) 
-        post_id = post_qs.fetchone()[0]
+        post_id = __cursor.fetchone()[0]
 
     update_post_query = update_post_query_prefix
     if query_params:
@@ -203,11 +211,11 @@ def create(request):
     __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
- 
 
 
 ## DETAILS ##
 def details(request):
+  #try:
     __cursor = connection.cursor()
     if request.method != 'GET':
         __cursor.close()
@@ -231,20 +239,22 @@ def details(request):
     except TypeError:
         __cursor.close()
         return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                    'response': 'forum not found'}))
+                                   'response': 'post not found'}))
     related = request.GET.getlist('related')
 
     for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
         get_related_info_func = related_functions_dict[related_]
-        post[related_], related_ids_ = get_related_info_func(related_ids[related_]) 
+        post[related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_]) 
     __cursor.close()        
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
+  #except Exception as e:
+  #  print e 
 
 ## LIST ##
 get_post_list_query = '''SELECT post.date, post.dislikes, forum.short_name, post.id,
                                 post.isApproved, post.isDeleted, post.isEdited, post.isHighlighted, 
-                                post.isSpam, post.likes, post.message, post.parent, 
+                                post.isSpam, post.likes, post.message, post.parent_id, 
                                 post.likes - post.dislikes as points, post.thread_id, user.email
                          FROM post INNER JOIN user
                          ON post.user_id = user.id
@@ -291,7 +301,7 @@ def list_posts(request):
 
     try:
         id_qs = __cursor.execute(related_query, related_params) 
-        if not id_qs.rowcount:
+        if not __cursor.rowcount:
             __cursor.close()
             return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                        'response': '{} not found'.format(related_table_name)})) 
@@ -299,7 +309,7 @@ def list_posts(request):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)}))
-    related_id = id_qs.fetchone()[0]
+    related_id = __cursor.fetchone()[0]
     query_params = [related_id, ]
     get_post_list_specified_query = get_post_list_query
     since_date = general_utils.validate_date(request.GET.get('since'))
@@ -340,9 +350,9 @@ def list_posts(request):
     
     posts = []
 
-    for post in post_list_qs.fetchall():
+    for post in __cursor.fetchall():
         posts.append({
-            "date": post[0],
+            "date": post[0].strftime("%Y-%m-%d %H:%M:%S") ,
             "dislikes": post[1],
             "forum": post[2],
             "id": post[3],
@@ -366,6 +376,8 @@ def list_posts(request):
 update_post_set_delete_flag_query = '''UPDATE post
                                        SET isDeleted = {}
                                        WHERE id = %s;
+                                     '''
+select_post_by_id =                  '''
                                        SELECT id
                                        FROM post
                                        WHERE id = %s;
@@ -392,11 +404,12 @@ def remove(request):
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'post id should be int'})) 
     try:
-        post_id_qs = __cursor.execute(update_post_set_delete_flag_query.format('TRUE'), [post_id, post_id]) 
-        if not post_id_qs.rowcount:
+        __cursor.execute(select_post_by_id, [post_id, ])
+        if not __cursor.rowcount:
              __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                        'response': 'post not found'}))
+                                        'response': 'post not found'}))        
+        post_id_qs = __cursor.execute(update_post_set_delete_flag_query.format('TRUE'), [post_id, ]) 
     except DatabaseError as db_err:
         __cursor.close() 
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
@@ -429,8 +442,13 @@ def restore(request):
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'post id should be int'})) 
     try:
-        post_id_qs = __cursor.execute(update_post_set_delete_flag_query.format('FALSE'), [post_id, post_id]) 
-        if not post_id_qs.rowcount:
+        __cursor.execute(select_post_by_id, [post_id, ])
+        if not __cursor.rowcount:
+             __cursor.close()
+             return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                        'response': 'post not found'})) 
+        post_id_qs = __cursor.execute(update_post_set_delete_flag_query.format('FALSE'), [post_id,]) 
+        if not __cursor.rowcount:
              __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'}))
@@ -446,8 +464,7 @@ def restore(request):
 update_post_message_query = u'''UPDATE post
                                SET message = %s
                                WHERE id = %s;
-                               SELECT id FROM post
-                               WHERE id = %s;'''
+                             '''
 
 @csrf_exempt
 def update(request):
@@ -472,11 +489,12 @@ def update(request):
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
                                    'response': 'post id should be int'})) 
     try:
-        post_id_qs = __cursor.execute(update_post_message_query, [message, post_id, post_id]) 
-        if not post_id_qs.rowcount:
+        __cursor.execute(select_post_by_id, [post_id, ])
+        if not __cursor.rowcount:
              __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
-                                        'response': 'post not found'}))
+                                        'response': 'post not found'})) 
+        post_id_qs = __cursor.execute(update_post_message_query, [message, post_id, post_id]) 
         post, related_obj = get_post_by_id(__cursor, post_id)
     except DatabaseError as db_err: 
         __cursor.close()
@@ -489,10 +507,8 @@ def update(request):
 ## VOTE ##
 update_post_votes_request = '''UPDATE post
                                SET {} = {} + 1
-                               WHERE id = %s;
-                               SELECT id FROM post
-                               WHERE id = %s;
                             '''
+                           
 @csrf_exempt
 def vote(request):
     __cursor = connection.cursor()
@@ -529,8 +545,13 @@ def vote(request):
         column_name = 'likes'
   
     try:
-        post_id_qs = __cursor.execute(update_post_votes_request.format(column_name), [post_id, post_id]) 
-        if not post_id_qs.rowcount:
+        __cursor.execute(select_post_by_id, [post_id, ])
+        if not __cursor.rowcount:
+             __cursor.close()
+             return HttpResponse(dumps({'code': codes.NOT_FOUND,
+                                        'response': 'post not found'})) 
+        post_id_qs = __cursor.execute(update_post_votes_request.format(column_name), [post_id, ]) 
+        if not __cursor.rowcount:
             __cursor.close()
             return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'}))

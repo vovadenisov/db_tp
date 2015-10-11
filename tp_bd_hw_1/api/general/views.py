@@ -6,18 +6,16 @@ from django.views.decorators.csrf import csrf_exempt
 import codes
 
 ## CLEAR ##
-clear_database_query = '''DELETE FROM post_hierarchy_utils;
-                          DELETE FROM followers;
-                          DELETE FROM subscriptions;
-                          DELETE FROM post;
-                          DELETE FROM thread;
-                          DELETE FROM forum;
-                          DELETE FROM user;
-                       '''
+clear_table_query = '''DELETE FROM {}'''
+refresh_auto_increment_query = '''ALTER TABLE {} AUTO_INCREMENT = 1;'''
+
 @csrf_exempt
 def clear(request):
     cursor = connection.cursor()
-    cursor.execute(clear_database_query)
+    for table in ['post_hierarchy_utils', 'followers', 'subscriptions',
+                  'post', 'thread', 'forum', 'user']:
+        cursor.execute(clear_table_query.format(table))
+        cursor.execute(refresh_auto_increment_query.format(table))
     result = {"code": codes.OK,
               "response": "OK"
              }

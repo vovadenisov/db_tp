@@ -7,17 +7,30 @@ import codes
 
 ## CLEAR ##
 clear_database_query = '''DELETE FROM post_hierarchy_utils;
+                          ALTER TABLE post_hierarchy_utils AUTO_INCREMENT = 1;
                           DELETE FROM followers;
+                          ALTER TABLE followers AUTO_INCREMENT = 1;
                           DELETE FROM subscriptions;
+                          ALTER TABLE subscriptions AUTO_INCREMENT = 1;
                           DELETE FROM post;
+                          ALTER TABLE post AUTO_INCREMENT = 1;
                           DELETE FROM thread;
+                          ALTER TABLE thread AUTO_INCREMENT = 1;
                           DELETE FROM forum;
+                          ALTER TABLE forum AUTO_INCREMENT = 1;
                           DELETE FROM user;
+                          ALTER TABLE user AUTO_INCREMENT = 1;
                        '''
+clear_table_query = '''DELETE FROM {}'''
+refresh_auto_increment_query = '''ALTER TABLE {} AUTO_INCREMENT = 1;'''
+
 @csrf_exempt
 def clear(request):
     cursor = connection.cursor()
-    cursor.execute(clear_database_query)
+    for table in ['post_hierarchy_utils', 'followers', 'subscriptions',
+                  'post', 'thread', 'forum', 'user']:
+        cursor.execute(clear_table_query.format(table))
+        cursor.execute(refresh_auto_increment_query.format(table))
     result = {"code": codes.OK,
               "response": "OK"
              }
