@@ -135,6 +135,7 @@ create_following_relationship_query = '''INSERT INTO followers
 
 @csrf_exempt
 def follow(request):
+  try:
     __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
@@ -186,6 +187,8 @@ def follow(request):
     __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': user}))
+  except Exception as e:
+    print e
 
 ## LIST FOLLOWERS ##
 get_all_followers_query_prefix = '''SELECT user.id
@@ -231,7 +234,7 @@ def listFollowers(request):
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
-    query += '''ORDER BY user.name''' + order
+    query += '''ORDER BY user.name ''' + order
 
     limit = request.GET.get('limit')
     if limit:
@@ -274,7 +277,7 @@ get_all_followings_query_prefix = '''SELECT user.id
                                  '''
 
 def listFollowings(request):
-    __cursor = connection.close()
+    __cursor = connection.cursor()
     if request.method != 'GET':
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INVALID_QUERY,
@@ -310,7 +313,7 @@ def listFollowings(request):
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
-    query += '''ORDER BY user.name''' + order
+    query += '''ORDER BY user.name ''' + order
 
     limit = request.GET.get('limit')
     if limit:
@@ -347,8 +350,8 @@ def listFollowings(request):
 get_all_user_posts_query = '''SELECT post.date, post.dislikes, forum.short_name,
                                post.id, post.isApproved, post.isDeleted,
                                post.isEdited, post.isHighlighted, post.isSpam,
-                               post.likes, post.message, post.parent,
-                               post.likes - post.dislikes as points, post.thread_id
+                               post.likes, post.message, post.parent_id,
+                               post.likes - post.dislikes as points, post.thread_id, 
                                user.email
                         FROM post JOIN user ON post.user_id = user.id
                              JOIN forum ON forum.id = post.forum_id
@@ -495,8 +498,8 @@ def unfollow(request):
 
 ## UPDATE PROFILE ##
 update_profile_query = '''UPDATE user
-                          SET about = %,
-                              name = %s,
+                          SET about = %s,
+                              name = %s
                           WHERE email = %s;
                        '''
 
@@ -505,6 +508,7 @@ select_user_by_email_query = '''SELECT id FROM user
 
 @csrf_exempt
 def updateProfile(request):
+  try:
     __cursor = connection.cursor()
     try:
         json_request = loads(request.body) 
@@ -515,7 +519,7 @@ def updateProfile(request):
     
     try:
         about = json_request['about']
-        name = json_request['message']
+        name = json_request['name']
         email = json_request['user']
     except KeyError as key_err:
         __cursor.close()
@@ -532,14 +536,15 @@ def updateProfile(request):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': str(db_err)}))
+     
+    user_id = __cursor.fetchone()[0]
     try:
         user_qs = __cursor.execute(update_profile_query, [about, name, email])
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': str(db_err)}))
- 
-    user_id = __cursor.fetchone()[0]
+
     try:
         user, related_ids = get_user_by_id(__cursor, user_id)
     except DatabaseError as db_err: 
@@ -548,5 +553,7 @@ def updateProfile(request):
                                    'response': unicode(db_err)})) 
     __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
-                               'response': user}))    
+                               'response': user}))  
+  except Exception as e:
+    print e
 

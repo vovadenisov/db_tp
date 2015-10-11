@@ -37,7 +37,7 @@ def get_user_by_id(cursor, user_id):
         result_user["followers"].extend([follower[0] for follower in cursor.fetchall()])
     cursor.execute(get_user_followings_query, [user_id, ])
     if cursor.rowcount:
-        result_user["followings"].extend([following[0] for following in cursor.fetchall()])
+        result_user["following"].extend([following[0] for following in cursor.fetchall()])
     cursor.execute(get_user_subscriptions_query, [user_id, ])
     if cursor.rowcount:
         result_user["subscriptions"].extend([subscription[0] for subscription in  cursor.fetchall()])

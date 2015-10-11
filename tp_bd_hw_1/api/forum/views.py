@@ -153,9 +153,9 @@ def details(request):
 ## List POSTS ##
 get_all_forum_posts_query = '''SELECT post.date, post.dislikes, forum.short_name,
                                       post.id, post.isApproved, post.isDeleted, post.isEdited,
-                                      post.isHighlighted, post.isSpam, post.likes, post.message, post.parent,
+                                      post.isHighlighted, post.isSpam, post.likes, post.message, post.parent_id,
                                       post.likes - post.dislikes as points, post.thread_id, user.email,
-                                      forum.id, thread.id, user.id
+                                      forum.id, thread_id, user.id
                                 FROM post INNER JOIN forum ON post.forum_id = forum.id
                                 INNER JOIN user ON user.id = post.user_id
                                 WHERE post.forum_id = %s
@@ -222,9 +222,9 @@ def listPosts(request):
     
     related = set(request.GET.getlist('related'))
     posts = []
-    for post in posts_qs.fetchall():
+    for post in __cursor.fetchall():
         posts.append({
-            "date": post[0],
+            "date": post[0].strftime("%Y-%m-%d %H:%M:%S"),
             "dislikes": post[1],
             "forum": post[2],
             "id": post[3],
@@ -246,9 +246,14 @@ def listPosts(request):
                        'user': post[17]
                        }
 
-        for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
-            get_related_info_func = related_functions_dict[related_]
-            posts[-1][related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_])
+        for related_ in related:
+            if related_ in ['thread', 'forum']:
+                get_related_info_func = related_functions_dict[related_]
+                posts[-1][related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_])
+            else:
+                __cursor.close()
+                return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                           'response': 'incorrect related parameter'})) 
     __cursor.close()            
     return HttpResponse(dumps({'code': codes.OK,
                                'response': posts
@@ -258,13 +263,14 @@ def listPosts(request):
 get_all_forum_threads_query = '''SELECT thread.date, thread.dislikes, forum.short_name,
                                         thread.id, thread.isClosed, thread.isDeleted, 
                                         thread.likes, thread.message,
-                                        thread.likes - thread.dislikes as points, posts.count as posts, 
-                                        thread.slug, thread.title, thread.user.email,
+                                        thread.likes - thread.dislikes as points, IFNULL(posts.count, 0) as posts, 
+                                        thread.slug, thread.title, user.email,
                                         forum.id,  user.id
                                  FROM thread INNER JOIN forum ON thread.forum_id = forum.id
                                  INNER JOIN user ON user.id = thread.user_id
-                                 INNER JOIN (SELECT thread_id, COUNT(*) as count
-                                             FROM posts
+                                 LEFT JOIN (SELECT thread_id, COUNT(*) as count
+                                             FROM post
+                                             WHERE isDeleted = FALSE
                                              GROUP BY thread_id) posts ON posts.thread_id = thread.id
                                  WHERE thread.forum_id = %s
                             '''
@@ -332,7 +338,7 @@ def listThreads(request):
     threads = []
     for thread in __cursor.fetchall():
         threads.append({
-            "date": thread[0],
+            "date": thread[0].strftime("%Y-%m-%d %H:%M:%S"),
             "dislikes": thread[1],
             "forum": thread[2],
             "id": thread[3],
@@ -351,16 +357,21 @@ def listThreads(request):
                        'user': thread[14]
                        }
 
-        for related_ in filter(lambda x: x in related_functions_dict.keys() and x != 'thread', related):
-            get_related_info_func = related_functions_dict[related_]
-            threads[-1][related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_])      
+        for related_ in  related:
+            if related_ in ['user', 'forum']:
+                get_related_info_func = related_functions_dict[related_]
+                threads[-1][related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_])  
+            else:
+                __cursor.close()
+                return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                           'response': 'incorrect related parameter'}))     
     __cursor.close()        
     return HttpResponse(dumps({'code': codes.OK,
                                'response': threads
                                }))
 
 ## LIST USERS ##
-get_all_forum_users_query = '''SELECT user.id
+get_all_forum_users_query = '''SELECT DISTINCT user.id
                                FROM user INNER JOIN post
                                ON user.id = post.user_id
                                WHERE post.forum_id = %s
@@ -392,7 +403,7 @@ def listUsers(request):
     query_params = [forum_id, ]
     since_id = general_utils.validate_id(request.GET.get('since_id'))
     if since_id:
-        get_all_forum_users_specified_query += '''AND id >= %s '''
+        get_all_forum_users_specified_query += '''AND user.id >= %s '''
         query_params.append(since_id)
     elif since_id == False and since_id is not None:
         __cursor.close()
@@ -426,7 +437,7 @@ def listUsers(request):
                                    'response': unicode(db_err)})) 
     users = []
     for user in __cursor.fetchall():
-        users.append(get_user_by_id(user[0])[0])  
+        users.append(get_user_by_id(__cursor, user[0])[0])  
     __cursor.close()       
     return HttpResponse(dumps({'code': codes.OK,
                                'response': users

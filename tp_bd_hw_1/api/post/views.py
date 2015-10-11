@@ -150,7 +150,8 @@ def create(request):
                                           'response': 'optional flag should be bool'})) 
            query_params.append([optional_arg_name, optional_arg_value])
 
-    parent_id = request.GET.get('parent')
+    parent_id = json_request.get('parent')
+    #print 'PARENT ID: ', parent_id
     with transaction.atomic():
         if parent_id:
             try:
@@ -159,12 +160,13 @@ def create(request):
                      __cursor.close()
                      return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                                 'response': 'parent post not found'})) 
+                post = __cursor.fetchone()                
                 __cursor.execute(update_post_children_count_query, [parent_id, ])
             except DatabaseError as db_err: 
                 __cursor.close()
                 return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                            'response': unicode(db_err)}))
-            post = __cursor.fetchone()
+
             hierarchy_id = post[2] + unicode(post[1] + 1) + '/'    
         else:
             try:
@@ -242,9 +244,14 @@ def details(request):
                                    'response': 'post not found'}))
     related = request.GET.getlist('related')
 
-    for related_ in filter(lambda x: x in related_functions_dict.keys(), related):
-        get_related_info_func = related_functions_dict[related_]
-        post[related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_]) 
+    for related_ in related:
+        if related_ in ['user', 'forum', 'thread']:
+            get_related_info_func = related_functions_dict[related_]
+            post[related_], related_ids_ = get_related_info_func(__cursor, related_ids[related_]) 
+        else:
+            __cursor.close()
+            return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
+                                       'response': 'incorrect related parameter'})) 
     __cursor.close()        
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
@@ -314,7 +321,7 @@ def list_posts(request):
     get_post_list_specified_query = get_post_list_query
     since_date = general_utils.validate_date(request.GET.get('since'))
     if since_date:
-        get_all_forum_posts_specified_query += '''AND post.date >= %s '''
+        get_post_list_specified_query += '''AND post.date >= %s '''
         query_params.append(since_date)
     elif since_date == False and since_date is not None:
         __cursor.close()
@@ -341,15 +348,14 @@ def list_posts(request):
         query_params.append(limit)
 
     try:
-        post_list_qs = __cursor.execute(get_post_list_specified_query.format(related_table_name), 
-                                        query_params)
+        __cursor.execute(get_post_list_specified_query.format(related_table_name), 
+                         query_params)
     except DatabaseError as db_err: 
         __cursor.close()
         return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
                                    'response': unicode(db_err)})) 
     
     posts = []
-
     for post in __cursor.fetchall():
         posts.append({
             "date": post[0].strftime("%Y-%m-%d %H:%M:%S") ,
@@ -494,7 +500,7 @@ def update(request):
              __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'})) 
-        post_id_qs = __cursor.execute(update_post_message_query, [message, post_id, post_id]) 
+        post_id_qs = __cursor.execute(update_post_message_query, [message, post_id]) 
         post, related_obj = get_post_by_id(__cursor, post_id)
     except DatabaseError as db_err: 
         __cursor.close()
@@ -507,6 +513,7 @@ def update(request):
 ## VOTE ##
 update_post_votes_request = '''UPDATE post
                                SET {} = {} + 1
+                               WHERE id= %s
                             '''
                            
 @csrf_exempt
@@ -550,7 +557,7 @@ def vote(request):
              __cursor.close()
              return HttpResponse(dumps({'code': codes.NOT_FOUND,
                                         'response': 'post not found'})) 
-        post_id_qs = __cursor.execute(update_post_votes_request.format(column_name), [post_id, ]) 
+        __cursor.execute(update_post_votes_request.format(column_name, column_name), [post_id, ]) 
         if not __cursor.rowcount:
             __cursor.close()
             return HttpResponse(dumps({'code': codes.NOT_FOUND,
@@ -563,3 +570,4 @@ def vote(request):
     __cursor.close()
     return HttpResponse(dumps({'code': codes.OK,
                                'response': post}))
+
