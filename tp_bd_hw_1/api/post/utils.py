@@ -1,21 +1,7 @@
-from json import dumps, loads
-from django.db import DatabaseError, IntegrityError
-
-
-
-get_post_by_id_query = ''' SELECT post.date, post.dislikes, forum.short_name, post.id,
-                                  post.isApproved, post.isDeleted, post.isEdited, post.isHighlighted, 
-                                  post.isSpam, post.likes, post.message, post.parent_id, 
-                                  post.likes - post.dislikes as points, post.thread_id, user.email,
-                                  post.forum_id, post.thread_id, post.user_id
-                           FROM post INNER JOIN user
-                           ON post.user_id = user.id
-                           INNER JOIN forum on forum.id = post.forum_id
-                           WHERE post.id = %s;
-                        '''
+from api.queries.select import SELECT_POST_BY_ID_FULL
 
 def get_post_by_id(cursor, post_id):
-    post_qs = cursor.execute(get_post_by_id_query, [post_id,])
+    post_qs = cursor.execute(SELECT_POST_BY_ID_FULL, [post_id,])
     post = cursor.fetchone()
     return {
         "date": post[0].strftime("%Y-%m-%d %H:%M:%S") ,

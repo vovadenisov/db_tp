@@ -1,5 +1,5 @@
 from django.conf.urls import include, url
-from views import create, details, listPosts, listThreads, listUsers
+from allviews import create, details, listPosts, listThreads, listUsers
 
 urlpatterns = [
     url(r'^create/', create),

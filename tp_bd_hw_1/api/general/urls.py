@@ -1,5 +1,5 @@
 from django.conf.urls import url
-from views import clear, status
+from allviews import clear, status
 
 urlpatterns = [
     url(r'^clear/', clear),

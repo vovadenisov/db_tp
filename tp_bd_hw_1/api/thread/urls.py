@@ -1,5 +1,5 @@
 from django.conf.urls import include, url
-from views import close_thread, open_thread, create, details, list_threads, remove, restore, update, vote, listPosts, subscribe, unsubscribe
+from allviews import close_thread, open_thread, create, details, list_threads, remove, restore, update, vote, listPosts, subscribe, unsubscribe
 
 urlpatterns = [
     url(r'^close/', close_thread),
