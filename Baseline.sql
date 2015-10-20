@@ -1,6 +1,6 @@
---CREATE DATABASE tp_hw_1;
---CREATE USER 'technopark_hw'@'localhost' IDENTIFIED BY 'bUp67AxJK90';
---GRANT ALL PRIVILEGES ON tp_hw_1.* TO 'technopark_hw'@'localhost';
+CREATE DATABASE tp_hw_1;
+CREATE USER 'technopark_hw'@'localhost' IDENTIFIED BY 'bUp67AxJK90';
+GRANT ALL PRIVILEGES ON tp_hw_1.* TO 'technopark_hw'@'localhost';
 
 USE tp_hw_1;
 CREATE TABLE user
@@ -103,7 +103,7 @@ CREATE TABLE followers
   CONSTRAINT followers_following_id_foreign_key FOREIGN KEY(following_id) REFERENCES user(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=INNODB;
 
---Сквозная нумерация постов в рамках одного thread
+ thread
 CREATE TABLE post_hierarchy_utils
 (
   id INT NOT NULL AUTO_INCREMENT,
@@ -113,6 +113,21 @@ CREATE TABLE post_hierarchy_utils
   PRIMARY KEY(id),
   CONSTRAINT post_hierarchy_utils_forum_id_foreign_key FOREIGN KEY(forum_id) REFERENCES forum(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=INNODB;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
