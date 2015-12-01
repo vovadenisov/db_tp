@@ -47,9 +47,9 @@ SELECT_ALL_THREADS_BY_FORUM = '''SELECT thread.date, thread.dislikes, forum.shor
                               '''
                               
 
-SELECT_USER_ID_BY_FORUM = '''SELECT DISTINCT user_id
-                             FROM post JOIN user ON user.id = post.user_id
-                             WHERE post.forum_id = %s
+SELECT_USER_ID_BY_FORUM = '''SELECT user_id
+                             FROM user_to_forum
+                             WHERE forum_id = %s
                           '''
                           
 SELECT_TABLE_STATUSES = '''SELECT table_name, table_rows

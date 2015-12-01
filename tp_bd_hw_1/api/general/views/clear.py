@@ -12,7 +12,7 @@ from api.queries.alter import RESET_AUTO_INCREMENT
 def clear(request):
     cursor = connection.cursor()
     for table in ['post_hierarchy_utils', 'followers', 'subscriptions',
-                  'post', 'thread', 'forum', 'user']:
+                  'post', 'thread','user_to_forum', 'forum', 'user']:
         cursor.execute(CLEAR_TABLE.format(table))
         cursor.execute(RESET_AUTO_INCREMENT.format(table))
     result = {"code": codes.OK,

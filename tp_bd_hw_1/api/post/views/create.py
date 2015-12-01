@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from api.general import codes, utils as general_utils
 from api.thread.utils import update_thread_posts
 from api.post.utils import get_post_by_id
-from api.queries.insert import INSERT_TOP_POST_NUMBER, INSERT_POST
+from api.queries.insert import INSERT_TOP_POST_NUMBER, INSERT_USER_TO_FORUM, INSERT_POST
 from api.queries.select import SELECT_LAST_INSERT_ID, SELECT_USER_BY_EMAIL, SELECT_FORUM_BY_SHORT_NAME, \
                                SELECT_TOP_POST_NUMBER, SELECT_PARENT_POST_HIERARCHY, SELECT_THREAD_BY_ID
 from api.queries.update import UPDATE_POST_PREFIX, UPDATE_POST_NUMBER, UPDATE_CHILD_POST_COUNT
@@ -61,6 +61,12 @@ def create(request):
                                    'response': 'forum not found'}))
     forum_id = __cursor.fetchone()[0]
 
+    try:
+        __cursor.execute(INSERT_USER_TO_FORUM, [forum_id, user_id])
+    except DatabaseError as db_err:
+        __cursor.close()
+        return HttpResponse(dumps({'code': codes.UNKNOWN_ERR,
+                                   'response': unicode(db_err)}))
     #validate thread
     try:
         __cursor.execute(SELECT_THREAD_BY_ID, [thread_id, ])  

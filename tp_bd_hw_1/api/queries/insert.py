@@ -10,7 +10,11 @@ INSERT_TOP_POST_NUMBER = u'''INSERT INTO post_hierarchy_utils
                              VALUES
                              (%s, 1);
                           '''
-                                
+INSERT_USER_TO_FORUM = u'''INSERT IGNORE INTO user_to_forum 
+                           SELECT %s, user.name, user.id 
+                           FROM user
+                           WHERE id = %s;'''
+                         
 INSERT_POST = u'''INSERT INTO post 
                   (hierarchy_id, date, message, user_id, forum_id, thread_id, parent_id)
                   VALUES

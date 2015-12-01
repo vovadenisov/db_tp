@@ -60,6 +60,8 @@ def listPosts(request):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect sort parameter: {}'.format(sort)}))
+    else:
+        sort = 'flat'
 
     if sort == 'flat':
         get_all_posts_query_postfix = get_all_posts_query_postfix.format('date')
