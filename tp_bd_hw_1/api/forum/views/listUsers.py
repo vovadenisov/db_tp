@@ -35,7 +35,7 @@ def listUsers(request):
     query_params = [forum_id, ]
     since_id = general_utils.validate_id(request.GET.get('since_id'))
     if since_id:
-        get_all_forum_users_specified_query += '''AND user.id >= %s '''
+        get_all_forum_users_specified_query += '''AND user_id >= %s '''
         query_params.append(since_id)
     elif since_id == False and since_id is not None:
         __cursor.close()
@@ -43,12 +43,13 @@ def listUsers(request):
                                    'response': 'since_id should be int'})) 
    
     order = request.GET.get('order', 'desc')
+
     if order.lower() not in ('asc', 'desc'):
         __cursor.close()
         return HttpResponse(dumps({'code': codes.INCORRECT_QUERY,
                                    'response': 'incorrect order parameter: {}'.format(order)}))
     
-    get_all_forum_users_specified_query += '''ORDER BY user.name ''' + order
+    get_all_forum_users_specified_query += '''ORDER BY user_name ''' + order
 
     limit = request.GET.get('limit')
     if limit:

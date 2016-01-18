@@ -1,4 +1,4 @@
-CLEAR_TABLE = '''DELETE FROM {}'''
+CLEAR_TABLE = '''TRUNCATE TABLE {}'''
 
 DELETE_SUBSCRIPTION = '''DELETE FROM subscriptions
                          WHERE thread_id = %s

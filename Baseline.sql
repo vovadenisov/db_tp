@@ -103,7 +103,7 @@ CREATE TABLE followers
   CONSTRAINT followers_following_id_foreign_key FOREIGN KEY(following_id) REFERENCES user(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=INNODB;
 
- thread
+
 CREATE TABLE post_hierarchy_utils
 (
   id INT NOT NULL AUTO_INCREMENT,
@@ -115,7 +115,16 @@ CREATE TABLE post_hierarchy_utils
 ) ENGINE=INNODB;
 
 
-
+CREATE TABLE `user_to_forum` (
+  `forum_id` int(11) NOT NULL,
+  `user_name` varchar(300) NOT NULL DEFAULT '',
+  `user_id` int(11) NOT NULL,
+  PRIMARY KEY (`forum_id`,`user_name`,`user_id`),
+  KEY `forum_id` (`forum_id`,`user_id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `user_to_forum_ibfk_1` FOREIGN KEY (`forum_id`) REFERENCES `forum` (`id`),
+  CONSTRAINT `user_to_forum_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
 
 
 
